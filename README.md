@@ -23,8 +23,12 @@ import (a later phase).
   category and an optional location; people and categories; display settings.
 - **Phase 2:** repeating events (with skip or change of a single date) and
   household "I did it" reminders.
-- **Next:** the shelf display page and its JSON API, then on-screen actions,
-  then Google import and review.
+- **Phase 3:** the shelf display page (`/display`) and its versioned JSON API,
+  with "I did it" from the display, an offline copy and night mode; reminder
+  times in minutes, hours or days, reminders for all-day events, and changing
+  a repeating event from a date on.
+- **Next:** on-screen quick add, delete and reschedule, then Google import and
+  review, then hardening the Pi as an unattended appliance.
 
 ## Privacy
 

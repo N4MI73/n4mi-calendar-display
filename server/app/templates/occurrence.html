@@ -27,7 +27,15 @@
   {% endif %}
 </div>
 
+<h2>This date and all later ones</h2>
+<p class="hint">Earlier dates stay as they were.</p>
+<div class="actions">
+  <a class="btn btn-quiet" href="/events/{{ event.id }}/occurrence/{{ occ.occ_date }}/edit-future">Change from this date on</a>
+  <a class="btn btn-danger" href="/events/{{ event.id }}/occurrence/{{ occ.occ_date }}/delete-future">Delete from this date on</a>
+</div>
+
 <h2>Every date</h2>
+<p class="hint">Past dates included.</p>
 <div class="actions">
   <a class="btn btn-quiet" href="/events/{{ event.id }}/edit">Edit the whole series</a>
   <a class="btn btn-danger" href="/events/{{ event.id }}/delete">Delete the whole series</a>

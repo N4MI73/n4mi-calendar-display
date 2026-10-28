@@ -1,0 +1,28 @@
+{# A reminder lead time: a number plus minutes / hours / days (decision D43). #}
+{% macro unit_select(name, value, label) %}
+<select class="unit" name="{{ name }}" aria-label="{{ label }}">
+  {% for u in ['minutes', 'hours', 'days'] %}
+  <option value="{{ u }}" {% if value == u %}selected{% endif %}>{{ u }}</option>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro category_reminder_fields(form, errors) %}
+<div class="field {% if errors.default_reminder %}has-error{% endif %}">
+  <label for="default_reminder">Default reminder for timed events <span class="opt">(leave blank for none)</span></label>
+  <div class="lead">
+    <input id="default_reminder" class="minutes" name="default_reminder" type="number" min="0" step="1" inputmode="numeric" value="{{ form.default_reminder }}">
+    {{ unit_select('default_unit', form.default_unit, 'Unit') }} <span>before</span>
+  </div>
+  {% if errors.default_reminder %}<p class="err">{{ errors.default_reminder }}</p>{% endif %}
+</div>
+<div class="field {% if errors.allday_days %}has-error{% endif %}">
+  <label for="allday_days">Reminder for all-day events, such as birthdays <span class="opt">(leave blank for none)</span></label>
+  <div class="lead">
+    <input id="allday_days" class="minutes" name="allday_days" type="number" min="0" max="30" step="1" inputmode="numeric" value="{{ form.allday_days }}">
+    <span>days before (0 = on the day)</span>
+  </div>
+  <p class="hint">The display shows it from the morning, for example “Mom's birthday is Thursday”.</p>
+  {% if errors.allday_days %}<p class="err">{{ errors.allday_days }}</p>{% endif %}
+</div>
+{% endmacro %}

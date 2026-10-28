@@ -1,9 +1,9 @@
 """N4MI Calendar Display — server.
 
 A FastAPI app with a server-rendered editor for events (including repeating
-ones), household "I did it" reminders, people, categories and settings.
-LAN only, no login (decision D10). The display page and its JSON API arrive
-in Phase 3.
+ones), household "I did it" reminders, people, categories and settings, plus
+the shelf display page (/display) and its versioned JSON API (/api/v1/...).
+LAN only, no login (decision D10).
 
 Run locally:  uvicorn app.main:app --port 8087
 Environment:  CAL_DB_PATH (default /data/calendar.db), TZ (default America/New_York)
@@ -23,9 +23,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, recurrence, store, timeutil
+from . import db, display, recurrence, store, timeutil
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 BASE_DIR = Path(__file__).parent
 
 
@@ -41,6 +41,14 @@ def _fmt_minutes(minutes: int | None) -> str:
         n = minutes // 60
         return f"{n} hour{'s' if n != 1 else ''} before"
     return f"{minutes} minutes before"
+
+
+def _fmt_days(days: int | None) -> str:
+    if days is None:
+        return "No reminder"
+    if days == 0:
+        return "On the day"
+    return f"{days} day{'s' if days != 1 else ''} before"
 
 
 def _event_when(event: dict) -> str:
@@ -91,6 +99,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     templates.env.globals.update(
         app_version=APP_VERSION,
         fmt_minutes=_fmt_minutes,
+        fmt_days=_fmt_days,
         event_when=_event_when,
         event_date=_event_date,
         event_start_date=_event_start_date,
@@ -128,6 +137,66 @@ def create_app(db_path: str | None = None) -> FastAPI:
         except Exception as exc:  # missing mount, unreadable file, ...
             return JSONResponse({"ok": False, "error": type(exc).__name__}, status_code=503)
         return {"ok": True, "version": APP_VERSION, "schema": version, "events": events, "people": people}
+
+    # ------------------------------------------------------------ display (Phase 3)
+
+    def _api_error(status: int, error: str, **extra) -> JSONResponse:
+        return JSONResponse({"ok": False, "error": error, **extra}, status_code=status)
+
+    def _moment(now: str | None) -> datetime | None:
+        """The local time to answer for: now, or the test clock (?now=YYYY-MM-DDTHH:MM)."""
+        if not now:
+            return timeutil.now_local()
+        try:
+            return datetime.strptime(now.strip()[:16], timeutil.DT_FMT)
+        except ValueError:
+            return None
+
+    def _unsupported(version: int) -> JSONResponse:
+        return _api_error(404, "unsupported_api_version", supported=[display.API_VERSION])
+
+    @app.get("/display", response_class=HTMLResponse)
+    def display_page(request: Request):
+        return templates.TemplateResponse(request, "display.html", {"api_version": display.API_VERSION})
+
+    @app.get("/api/v{version:int}/display")
+    def api_display(version: int, now: str | None = None):
+        if version != display.API_VERSION:
+            return _unsupported(version)
+        moment = _moment(now)
+        if moment is None:
+            return _api_error(400, "bad_now", hint="Use now=YYYY-MM-DDTHH:MM")
+        c = conn()
+        try:
+            data = display.build(c, moment)
+        finally:
+            c.close()
+        data["app_version"] = APP_VERSION
+        return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v{version:int}/reminders/{reminder_id}/{action}")
+    def api_reminder(version: int, reminder_id: int, action: str, now: str | None = None):
+        """"I did it" (action=done) and Undo (action=undo) from the display (D40)."""
+        if version != display.API_VERSION:
+            return _unsupported(version)
+        if action not in ("done", "undo"):
+            return _api_error(404, "unknown_action")
+        moment = _moment(now)
+        if moment is None:
+            return _api_error(400, "bad_now", hint="Use now=YYYY-MM-DDTHH:MM")
+        c = conn()
+        try:
+            if not store.get_reminder(c, reminder_id):
+                return _api_error(404, "no_such_reminder")
+            if action == "done":
+                ok = store.mark_reminder_done(c, reminder_id, moment)
+            else:
+                ok = store.undo_reminder_done(c, reminder_id)
+        finally:
+            c.close()
+        if not ok:
+            return _api_error(409, "not_showing" if action == "done" else "nothing_to_undo")
+        return {"ok": True, "id": reminder_id, "action": action}
 
     # ------------------------------------------------------------ web app
 
@@ -173,7 +242,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
             rows.append({"occ_date": occ_date, "label": _date_label(occ_date), "skipped": x["skipped"], "change": change})
         return rows
 
-    def _event_form_page(request, c, form: store.EventInput, event_id=None, errors=None, status=200):
+    def _event_form_page(request, c, form: store.EventInput, event_id=None, errors=None, status=200,
+                         future=None, dropped=None):
+        """future: an occurrence date when changing "this and all later dates" (D46)."""
         return render(
             request,
             "event_form.html",
@@ -183,7 +254,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
             errors=errors or {},
             people=store.list_people(c),
             categories=store.list_categories(c),
-            exceptions=_exception_rows(c, event_id) if event_id else [],
+            exceptions=_exception_rows(c, event_id) if event_id and not future else [],
+            future=future,
+            future_label=_date_label(future) if future else "",
+            dropped=[_date_label(x["occ_date"]) + (" (skipped)" if x["skipped"] else " (changed)")
+                     for x in (dropped or [])],
         )
 
     def _form_to_input(form) -> store.EventInput:
@@ -200,6 +275,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             person_ids=form.getlist("people"),
             reminder_mode=form.get("reminder_mode", "default"),
             reminder_minutes=form.get("reminder_minutes", ""),
+            reminder_unit=form.get("reminder_unit", "minutes"),
             **_repeat_from_form(form, default="none"),
         )
 
@@ -348,6 +424,66 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         return redirect("/", f"Changed “{form.title.strip()}” for {_date_label(occ_date)} only.")
+
+    @app.get("/events/{event_id}/occurrence/{occ_date}/edit-future", response_class=HTMLResponse)
+    def occurrence_edit_future(request: Request, event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+            if not occ:
+                return redirect("/", "That date is no longer part of the series.")
+            return _event_form_page(request, c, store.future_input(event, occ_date), event_id=event_id,
+                                    future=occ_date)
+        finally:
+            c.close()
+
+    @app.post("/events/{event_id}/occurrence/{occ_date}/edit-future", response_class=HTMLResponse)
+    async def occurrence_update_future(request: Request, event_id: int, occ_date: str):
+        f = await request.form()
+        form = _form_to_input(f)
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+            if not occ:
+                return redirect("/", "That date is no longer part of the series.")
+            try:
+                dropped = store.split_dropped(c, event_id, occ_date, form)
+                if dropped and f.get("confirm") != "1":
+                    # Show which adjusted dates would go back to normal before saving.
+                    return _event_form_page(request, c, form, event_id=event_id, future=occ_date, dropped=dropped)
+                store.split_series(c, event_id, occ_date, form)
+            except store.ValidationError as exc:
+                return _event_form_page(request, c, form, event_id=event_id, errors=exc.errors, status=400,
+                                        future=occ_date)
+        finally:
+            c.close()
+        return redirect("/", f"Changed “{form.title.strip()}” from {_date_label(occ_date)} on.")
+
+    @app.get("/events/{event_id}/occurrence/{occ_date}/delete-future", response_class=HTMLResponse)
+    def occurrence_delete_future_confirm(request: Request, event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+        finally:
+            c.close()
+        if not occ:
+            return redirect("/", "That date is no longer part of the series.")
+        return render(request, "confirm_delete_future.html", event=event, occ_date=occ_date,
+                      occ_label=_date_label(occ_date))
+
+    @app.post("/events/{event_id}/occurrence/{occ_date}/delete-future")
+    def occurrence_delete_future(event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+            whole = store.end_series_from(c, event_id, occ_date) if occ else None
+        finally:
+            c.close()
+        if not occ:
+            return redirect("/", "That date is no longer part of the series.")
+        if whole:
+            return redirect("/", f"Deleted every date of “{event['title']}”.")
+        return redirect("/", f"Deleted “{event['title']}” from {_date_label(occ_date)} on. Earlier dates stay.")
 
     @app.post("/events/{event_id}/occurrence/{occ_date}/skip")
     def occurrence_skip(event_id: int, occ_date: str):
@@ -571,6 +707,13 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     # ------------------------------------------------------------ categories
 
+    def _category_form(f) -> dict:
+        return {
+            "name": f.get("name", ""), "color": f.get("color", ""),
+            "default_reminder": f.get("default_reminder", ""), "default_unit": f.get("default_unit", "minutes"),
+            "allday_days": f.get("allday_days", ""),
+        }
+
     @app.get("/categories", response_class=HTMLResponse)
     def categories_page(request: Request):
         c = conn()
@@ -578,7 +721,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             return render(
                 request, "categories.html",
                 categories=store.list_categories(c),
-                new={"name": "", "color": "#8B8D98", "default_reminder": "60"},
+                new={"name": "", "color": "#8B8D98", "default_reminder": "1", "default_unit": "hours", "allday_days": ""},
                 errors={},
             )
         finally:
@@ -587,11 +730,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/categories", response_class=HTMLResponse)
     async def category_create(request: Request):
         f = await request.form()
-        new = {"name": f.get("name", ""), "color": f.get("color", ""), "default_reminder": f.get("default_reminder", "")}
+        new = _category_form(f)
         c = conn()
         try:
             try:
-                store.save_category(c, new["name"], new["color"], new["default_reminder"])
+                store.save_category(c, new["name"], new["color"], new["default_reminder"],
+                                    default_unit=new["default_unit"], allday_days=new["allday_days"])
             except store.ValidationError as exc:
                 return render(
                     request, "categories.html", status_code=400,
@@ -610,25 +754,25 @@ def create_app(db_path: str | None = None) -> FastAPI:
             c.close()
         if not cat:
             return redirect("/categories", "That category no longer exists.")
+        amount, unit = store.split_minutes(cat["default_reminder_minutes"])
         form = {
             "id": cat["id"], "name": cat["name"], "color": cat["color"],
-            "default_reminder": "" if cat["default_reminder_minutes"] is None else str(cat["default_reminder_minutes"]),
+            "default_reminder": amount, "default_unit": unit,
+            "allday_days": "" if cat["default_allday_days"] is None else str(cat["default_allday_days"]),
         }
         return render(request, "category_form.html", category=form, errors={})
 
     @app.post("/categories/{category_id}/edit", response_class=HTMLResponse)
     async def category_update(request: Request, category_id: int):
         f = await request.form()
-        form = {
-            "id": category_id, "name": f.get("name", ""), "color": f.get("color", ""),
-            "default_reminder": f.get("default_reminder", ""),
-        }
+        form = dict(_category_form(f), id=category_id)
         c = conn()
         try:
             if not store.get_category(c, category_id):
                 return redirect("/categories", "That category no longer exists.")
             try:
-                store.save_category(c, form["name"], form["color"], form["default_reminder"], category_id)
+                store.save_category(c, form["name"], form["color"], form["default_reminder"], category_id,
+                                    default_unit=form["default_unit"], allday_days=form["allday_days"])
             except store.ValidationError as exc:
                 return render(request, "category_form.html", status_code=400, category=form, errors=exc.errors)
         finally:

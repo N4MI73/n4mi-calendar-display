@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_lead.html" import category_reminder_fields %}
 {% set active = 'categories' %}
 {% block title %}Edit category{% endblock %}
 {% block content %}
@@ -16,11 +17,7 @@
       {% if errors.color %}<p class="err">{{ errors.color }}</p>{% endif %}
     </div>
   </div>
-  <div class="field {% if errors.default_reminder %}has-error{% endif %}">
-    <label for="default_reminder">Default reminder, minutes before <span class="opt">(leave blank for none)</span></label>
-    <input id="default_reminder" name="default_reminder" type="number" min="0" max="10080" step="5" inputmode="numeric" value="{{ category.default_reminder }}">
-    {% if errors.default_reminder %}<p class="err">{{ errors.default_reminder }}</p>{% endif %}
-  </div>
+  {{ category_reminder_fields(category, errors) }}
   <div class="actions">
     <button class="btn btn-primary" type="submit">Save</button>
     <a class="btn btn-quiet" href="/categories">Cancel</a>

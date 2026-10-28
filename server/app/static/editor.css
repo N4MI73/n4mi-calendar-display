@@ -200,3 +200,8 @@ fieldset .choice { margin-right: 1rem; }
 .undo { margin: -0.25rem 0 1rem; }
 h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
 .actions form { margin: 0; }
+
+/* Reminder lead time: number + unit (Phase 3, D43). */
+.lead { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.lead input.minutes { margin: 0; }
+select.unit { width: auto; min-height: 44px; }

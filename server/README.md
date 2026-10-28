@@ -1,7 +1,7 @@
 # N4MI Calendar Display — server
 
-FastAPI + SQLite. Serves the editor (works on a computer or a phone) and, in a
-later phase, the shelf display page and its JSON API.
+FastAPI + SQLite. Serves the editor (works on a computer or a phone), the
+shelf display page (`/display`) and the display's JSON API (`/api/v1/...`).
 
 The editor manages events (one-off and repeating), household "I did it"
 reminders, people, categories and display settings.
@@ -91,6 +91,51 @@ pulls a finished image (`pull_policy: always`).
   mode) until someone taps "I did it". With carry-over off they disappear at
   the end of their day; with it on they stay until done, as a single item.
   "Undo" restores the previous state.
+
+- A repeating event can be changed or deleted for **just one date**, **from a
+  date on** (the series ends the day before and a new series starts on that
+  date with the same people; adjusted dates that no longer fit the new pattern
+  are listed for confirmation first), or **for every date**.
+
+## Reminders on the display
+
+- Lead times are entered as a number and a unit (minutes, hours or days) and
+  stored as minutes. Each category has a default for timed events and a
+  separate default, in days, for all-day events such as birthdays (blank =
+  none). An event can use the default, set its own, or have no reminder.
+- The banner reads "Dentist at 2:30 PM today", then "Dentist in 45 minutes"
+  (bright) from the lead time, at most 2 hours before. Earlier days read
+  "Dentist tomorrow at 2:30 PM" or "Mom's birthday is Thursday". Banners never
+  start during night mode; one that would is moved to the end of dark hours.
+  When several calm banners apply they take turns every 10 seconds; a bright
+  one always wins.
+
+## The display page and API
+
+- `GET /display` — the shelf screen, designed for 1280×800 (it scales with the
+  screen). Everything it needs, including the Atkinson Hyperlegible font
+  (`app/static/fonts/`, SIL Open Font License), is served from here; nothing
+  is loaded from the internet.
+  - `?now=2026-11-02T08:05` runs the page as if it were that time (a test
+    clock; it keeps ticking from there).
+  - `?kiosk=1` hides the mouse pointer.
+- The page fetches the API every minute and keeps the last good copy in the
+  browser. If the server can't be reached it keeps showing that copy, with an
+  amber "Not updated since …" bar once it is older than the stale threshold.
+  With no copy at all it says "Can't reach the calendar right now" — never
+  "nothing scheduled". When the server has been updated, the page reloads
+  itself.
+- Night mode: during dark hours the page is black; a tap wakes it for the wake
+  time and never presses anything underneath. (Switching the monitor's
+  picture off comes with the Pi setup in Phase 6.)
+- `GET /api/v1/display[?now=…]` — today plus the Upcoming range plus 7 days:
+  each day's events with labels already written ("2:30 PM", "day 2 of 4"),
+  people and category, and `remind_at` (when the banner starts); the
+  reminders showing now; the display settings. Repeating events are already
+  expanded. Fields are only ever added. An unsupported version
+  (`/api/v2/...`) answers 404 with `"error": "unsupported_api_version"`.
+- `POST /api/v1/reminders/{id}/done` and `/undo` — "I did it" and Undo from
+  the display. 409 when there is nothing to tick or undo.
 
 ## Times
 

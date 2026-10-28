@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}Delete from this date on{% endblock %}
+{% block content %}
+<h1>Delete from {{ occ_label }} on?</h1>
+<p class="notice">This removes {{ occ_label }} and every later date of “{{ event.title }}”. Earlier dates stay on the calendar.</p>
+<div class="card">
+  <p class="title">{{ event.title }}</p>
+  <p>{{ describe(event.rrule, event_start_date(event), event.recurrence_end) }}</p>
+  <p>{% for p in event.people %}<span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>{% endfor %}
+     <span class="pill category"><span class="swatch" style="background: {{ event.category_color }}" aria-hidden="true"></span>{{ event.category_name }}</span></p>
+</div>
+<form method="post" class="actions">
+  <button class="btn btn-danger" type="submit">Delete from {{ occ_label }} on</button>
+  <a class="btn btn-quiet" href="/events/{{ event.id }}/occurrence/{{ occ_date }}">Keep it</a>
+</form>
+{% endblock %}

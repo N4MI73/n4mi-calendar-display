@@ -1,10 +1,24 @@
 {% extends "base.html" %}
 {% from "_repeat.html" import repeat_fields %}
+{% from "_lead.html" import unit_select %}
 {% set active = 'events' %}
 {% block title %}{{ 'Edit event' if event_id else 'Add event' }}{% endblock %}
 {% block content %}
+{% if future %}
+<h1>Change this and later dates</h1>
+<p class="hint">Changes start on {{ future_label }}. Earlier dates stay as they were.</p>
+{% else %}
 <h1>{{ ('Edit the whole series' if form.repeat != 'none' else 'Edit event') if event_id else 'Add event' }}</h1>
-{% if event_id and form.repeat != 'none' %}<p class="hint">Changes here apply to every occurrence. To change just one date, open that date from the Events list.</p>{% endif %}
+{% if event_id and form.repeat != 'none' %}<p class="hint">Changes here apply to every date, past ones included. To change just one date, or a date and everything after it, open that date from the Events list.</p>{% endif %}
+{% endif %}
+
+{% if dropped %}
+<div class="notice" role="alert">
+  <p>These dates were adjusted or skipped, and they don't fall on the new pattern. Saving puts them back to normal:</p>
+  <ul>{% for d in dropped %}<li>{{ d }}</li>{% endfor %}</ul>
+  <p>Choose <strong>Save anyway</strong> to go ahead, or Cancel.</p>
+</div>
+{% endif %}
 
 {% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
 
@@ -13,6 +27,7 @@
 {% endif %}
 
 <form method="post" class="form" novalidate>
+  {% if dropped %}<input type="hidden" name="confirm" value="1">{% endif %}
   <div class="field {% if errors.title %}has-error{% endif %}">
     <label for="title">What</label>
     <input id="title" name="title" type="text" maxlength="120" required autofocus value="{{ form.title }}" placeholder="Dentist">
@@ -71,7 +86,7 @@
     <label for="category_id">Category</label>
     <select id="category_id" name="category_id">
     {% for c in categories %}
-      <option value="{{ c.id }}" {% if c.id|string == form.category_id %}selected{% endif %}>{{ c.name }} ({{ fmt_minutes(c.default_reminder_minutes)|lower }})</option>
+      <option value="{{ c.id }}" {% if c.id|string == form.category_id %}selected{% endif %}>{{ c.name }}</option>
     {% endfor %}
     </select>
     {% if errors.category %}<p class="err">{{ errors.category }}</p>{% endif %}
@@ -87,9 +102,12 @@
     <legend>Reminder on the display</legend>
     <label class="choice"><input type="radio" name="reminder_mode" value="default" {% if form.reminder_mode == 'default' %}checked{% endif %}> Category default</label>
     <label class="choice"><input type="radio" name="reminder_mode" value="none" {% if form.reminder_mode == 'none' %}checked{% endif %}> No reminder</label>
-    <label class="choice"><input type="radio" name="reminder_mode" value="custom" {% if form.reminder_mode == 'custom' %}checked{% endif %}> Custom:
-      <input class="minutes" name="reminder_minutes" type="number" min="0" max="10080" step="5" inputmode="numeric" value="{{ form.reminder_minutes }}" aria-label="Minutes before"> minutes before</label>
-    <p class="hint">All-day events don't get a timed reminder.</p>
+    <label class="choice"><input type="radio" name="reminder_mode" value="custom" {% if form.reminder_mode == 'custom' %}checked{% endif %}> Custom:</label>
+    <div class="lead">
+      <input class="minutes" name="reminder_minutes" type="number" min="0" step="1" inputmode="numeric" value="{{ form.reminder_minutes }}" aria-label="How long before">
+      {{ unit_select('reminder_unit', form.reminder_unit, 'Unit') }} <span>before</span>
+    </div>
+    <p class="hint">For all-day events, such as birthdays, the reminder is in days and shows from the morning.</p>
     {% if errors.reminder %}<p class="err">{{ errors.reminder }}</p>{% endif %}
   </fieldset>
 
@@ -100,9 +118,9 @@
   </div>
 
   <div class="actions">
-    <button class="btn btn-primary" type="submit">Save</button>
+    <button class="btn btn-primary" type="submit">{{ 'Save anyway' if dropped else 'Save' }}</button>
     <a class="btn btn-quiet" href="/">Cancel</a>
-    {% if event_id %}<a class="btn btn-danger push-right" href="/events/{{ event_id }}/delete">{{ 'Delete series' if form.repeat != 'none' else 'Delete' }}</a>{% endif %}
+    {% if event_id and not future %}<a class="btn btn-danger push-right" href="/events/{{ event_id }}/delete">{{ 'Delete series' if form.repeat != 'none' else 'Delete' }}</a>{% endif %}
   </div>
 </form>
 
@@ -126,8 +144,13 @@
 // Hide the time boxes for all-day events. The form still works without this.
 (function () {
   var box = document.getElementById('all_day');
+  var unit = document.querySelector('select[name="reminder_unit"]');
   function sync() {
     document.querySelectorAll('.timed').forEach(function (el) { el.hidden = box.checked; });
+    if (unit) {
+      Array.prototype.forEach.call(unit.options, function (o) { o.disabled = box.checked && o.value !== 'days'; });
+      if (box.checked) unit.value = 'days';
+    }
   }
   box.addEventListener('change', sync);
   sync();

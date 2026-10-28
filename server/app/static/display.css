@@ -1,0 +1,161 @@
+/* N4MI Calendar Display — the shelf screen (Phase 3).
+   Designed for the Elecrow at 1280×800. Sizes are in rem, and 1rem is set from
+   the screen size (16px at 1280×800), so the layout scales with the screen.
+   Approved mockup: Calendar Display Mockup, "Phase 3 · 1280 × 800" (D42). */
+
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-style: normal; font-display: block;
+  src: url("/static/fonts/AtkinsonHyperlegible-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; font-style: normal; font-display: block;
+  src: url("/static/fonts/AtkinsonHyperlegible-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-style: italic; font-display: block;
+  src: url("/static/fonts/AtkinsonHyperlegible-Italic.woff2") format("woff2"); }
+
+:root {
+  --bg: #0E1116;
+  --panel: #161A21;
+  --rule: #262C37;
+  --text: #F2F3F5;
+  --text-2: #C3C8D1;
+  --text-3: #AEB4BF;
+  --text-4: #8E95A2;
+  --banner: #232936;
+  --soon-row: #232B3A;
+  --chip: #222834;
+  --chip-text: #D7DBE2;
+  --card: #1C2433;
+  --card-line: #34405A;
+  --accent: #9CC3FF;
+  --button: #E8EEF9;
+  --button-2: #2E3644;
+  --amber: #FFB224;
+  font-size: min(calc(100vw / 80), calc(100vh / 50));
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+body {
+  color: var(--text);
+  font-family: "Atkinson Hyperlegible", system-ui, sans-serif;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+html.kiosk, html.kiosk * { cursor: none !important; }
+[hidden] { display: none !important; }
+
+.app { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+/* Banner ---------------------------------------------------------------- */
+.banner {
+  flex: 0 0 5rem; display: flex; align-items: center; gap: 1.125rem; padding: 0 2.25rem;
+  background: var(--banner); color: var(--text); min-width: 0;
+}
+.banner .bell { flex: 0 0 auto; width: 2.25rem; height: 2.25rem; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.banner-text { font-size: 2.25rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.banner-sub { font-size: 1.5rem; color: #3A4150; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.banner-pills { margin-left: auto; display: flex; gap: 0.625rem; flex: 0 0 auto; }
+.banner-pills .pill { font-size: 1.25rem; padding: 0.25rem 1rem; }
+.banner.soon { background: var(--text); color: var(--bg); }
+.banner.soon .bell { stroke-width: 2.4; }
+.banner.soon .banner-text { font-size: 2.375rem; }
+.banner:not(.soon) .banner-sub { display: none; }
+
+/* "I did it" reminders ----------------------------------------------------- */
+.strip { flex: 0 0 auto; display: flex; gap: 1rem; padding: 0.75rem 2.25rem 0; }
+.rem {
+  flex: 1 1 0; min-width: 0; height: 4rem; display: flex; align-items: center; gap: 0.875rem;
+  padding: 0 0.5rem 0 1.125rem; border-radius: 0.875rem; background: var(--card); border: 2px solid var(--card-line);
+}
+.rem .ring { flex: 0 0 auto; width: 1.875rem; height: 1.875rem; fill: none; stroke: var(--accent); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+.rem-words { display: flex; flex-direction: column; min-width: 0; }
+.rem-text { font-size: 1.625rem; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rem-sub { font-size: 1.125rem; color: var(--text-3); line-height: 1.2; }
+.rem-sub.problem { color: var(--amber); }
+.rem button {
+  margin-left: auto; flex: 0 0 auto; height: 3.125rem; padding: 0 1.75rem; border: 0; border-radius: 0.75rem;
+  background: var(--button); color: var(--bg); font: inherit; font-size: 1.5rem; font-weight: 700;
+}
+.rem button:active { transform: scale(0.97); }
+.rem.done { background: #121821; border-style: dashed; }
+.rem.done .rem-text { font-weight: 400; color: var(--text-2); font-size: 1.5rem; }
+.rem.done .rem-text strong { color: var(--text); }
+.rem.done button { background: transparent; color: var(--text); border: 2px solid var(--text-4); font-size: 1.375rem; padding: 0 1.375rem; }
+.rem.done button .count { font-weight: 400; color: var(--text-3); }
+
+/* Date and clock -------------------------------------------------------- */
+.head { flex: 0 0 4rem; display: flex; justify-content: space-between; align-items: center; padding: 0 2.25rem; }
+.head-date, .head-clock { font-size: 2.375rem; font-weight: 700; }
+.head-clock { font-variant-numeric: tabular-nums; }
+
+/* Panels --------------------------------------------------------------- */
+.panels {
+  flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  column-gap: 1.5rem; padding: 0 2.25rem 1.75rem;
+}
+.panel { background: var(--panel); border-radius: 1rem; padding: 1.125rem 1.625rem; display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden; }
+.panel h2 { margin: 0 0 0.5rem; font-size: 1.75rem; font-weight: 700; color: var(--text-2); line-height: 3.375rem; flex: 0 0 auto; }
+.coming { padding: 1.125rem 1.5rem; }
+.today-list, .coming-list { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Today rows */
+.row { display: grid; grid-template-columns: 9.375rem minmax(0, 1fr); column-gap: 1.125rem; align-items: start;
+  padding: 0.75rem 0; border-top: 2px solid var(--rule); flex: 0 0 auto; }
+.row .time { font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.row .time .left { display: block; font-size: 1.25rem; }
+.row .what { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.row .title { font-size: 2.125rem; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.row .tags { display: flex; gap: 0.625rem; flex-wrap: wrap; align-items: center; }
+.row .where { font-size: 1.25rem; color: var(--text-3); }
+.row.allday { align-items: center; padding: 0.625rem 0; }
+.row.allday .time { font-size: 1.5rem; color: var(--text-2); }
+.row.allday .what { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
+.row.allday .title { font-size: 1.75rem; }
+.row .part { font-weight: 400; font-size: 1.375rem; color: var(--text-3); }
+.row.info .time { font-weight: 400; font-size: 1.625rem; color: var(--text-3); }
+.row.info .title { font-weight: 400; font-style: italic; font-size: 1.875rem; color: var(--text-2); }
+.row.soon { background: var(--soon-row); border-radius: 0.75rem; padding: 0.875rem; margin: 0 -0.875rem; border-top-color: transparent; }
+.row.soon + .row { border-top-color: transparent; }
+.row.soon .where { color: var(--text-2); }
+.earlier, .later { padding: 0.625rem 0; border-top: 2px solid var(--rule); font-size: 1.375rem; color: var(--text-4); flex: 0 0 auto; }
+.quiet { padding: 1rem 0; border-top: 2px solid var(--rule); }
+.quiet .big { font-size: 2.125rem; font-weight: 700; }
+.quiet .next { margin-top: 0.75rem; font-size: 1.5rem; color: var(--text-3); }
+
+/* Coming up */
+.day { display: flex; flex-direction: column; gap: 0.375rem; padding: 0.75rem 0 0.5rem; border-top: 2px solid var(--rule); flex: 0 0 auto; }
+.day-name { font-size: 1.25rem; font-weight: 700; color: var(--text-3); }
+.item { display: flex; flex-direction: column; gap: 0.375rem; }
+.item + .item { margin-top: 0.375rem; }
+.item .line { font-size: 1.625rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.item .line .t { color: var(--text-2); font-variant-numeric: tabular-nums; margin-right: 0.5rem; }
+.item.info .line { font-weight: 400; font-style: italic; color: var(--text-2); }
+.item .tags { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.item .pill { font-size: 1rem; padding: 0.1875rem 0.75rem; }
+.item .pill.category { padding: 0.1875rem 0.6875rem 0.1875rem 0.5625rem; gap: 0.4375rem; }
+.item .pill.category .sq { width: 0.6875rem; height: 0.6875rem; }
+.more { flex: 0 0 auto; padding-top: 0.75rem; font-size: 1.25rem; color: var(--text-4); }
+
+/* Pills: a person is a filled color pill; a category is a neutral pill with a colored square. */
+.pill { display: inline-flex; align-items: center; border-radius: 999px; font-size: 1.125rem; font-weight: 700;
+  padding: 0.1875rem 0.875rem; white-space: nowrap; }
+.pill.category { background: var(--chip); color: var(--chip-text); font-weight: 400; gap: 0.5rem; padding: 0.1875rem 0.75rem 0.1875rem 0.625rem; }
+.pill.category .sq { width: 0.75rem; height: 0.75rem; border-radius: 3px; flex: 0 0 auto; }
+
+/* Stale bar --------------------------------------------------------------- */
+.stale { flex: 0 0 4rem; display: flex; align-items: center; gap: 1rem; padding: 0 2.25rem; background: var(--amber); color: #1A1206;
+  font-size: 1.5rem; white-space: nowrap; overflow: hidden; }
+.stale strong { font-size: 1.625rem; }
+.stale svg { flex: 0 0 auto; width: 1.875rem; height: 1.875rem; fill: none; stroke: currentColor; stroke-width: 2.4;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+/* Full-screen message (first start, or no saved schedule for today) -------- */
+.message { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 3rem;
+  text-align: center; }
+.message p { margin: 0; font-size: 2.5rem; font-weight: 700; color: var(--text-2); max-width: 50rem; line-height: 1.3; }
+.message p small { display: block; margin-top: 1rem; font-size: 1.625rem; font-weight: 400; color: var(--text-3); }
+
+/* Night (dark hours): fully black. A tap wakes the screen and never presses anything. */
+.night { position: fixed; inset: 0; background: #000; z-index: 10; cursor: none; }

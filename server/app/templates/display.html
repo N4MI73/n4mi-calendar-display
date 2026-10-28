@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="app-version" content="{{ app_version }}">
+<title>Calendar</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/display.css?v={{ app_version }}">
+</head>
+<body>
+<!-- N4MI Calendar Display: the shelf screen (Phase 3). Everything here is served
+     by the calendar server; nothing is loaded from the internet. The page reads
+     /api/v1/display, keeps the last good copy in the browser, and shows it with
+     a "Not updated since" bar when the server can't be reached. -->
+<div id="app" class="app" hidden>
+  <div id="banner" class="banner" hidden>
+    <svg class="bell" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+    <div id="banner-text" class="banner-text"></div>
+    <div id="banner-sub" class="banner-sub"></div>
+    <div id="banner-pills" class="banner-pills"></div>
+  </div>
+
+  <div id="strip" class="strip" hidden></div>
+
+  <header class="head">
+    <div id="date" class="head-date"></div>
+    <div id="clock" class="head-clock"></div>
+  </header>
+
+  <main class="panels">
+    <section class="panel today" aria-labelledby="today-h">
+      <h2 id="today-h">Today</h2>
+      <div id="today" class="today-list"></div>
+    </section>
+    <section class="panel coming" aria-labelledby="coming-h">
+      <h2 id="coming-h">Coming up</h2>
+      <div id="coming" class="coming-list"></div>
+      <div id="coming-more" class="more"></div>
+    </section>
+  </main>
+
+  <div id="stale" class="stale" role="status" hidden>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+    <strong id="stale-when"></strong>
+    <span>Showing the last schedule received. Recent changes may be missing.</span>
+  </div>
+</div>
+
+<div id="message" class="message" role="status">
+  <p id="message-text">Loading the calendar…</p>
+</div>
+
+<div id="night" class="night" hidden></div>
+
+<script src="/static/display.js?v={{ app_version }}"></script>
+</body>
+</html>

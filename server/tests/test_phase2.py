@@ -344,7 +344,8 @@ class TestMigrationFromPhase1(unittest.TestCase):
                          " VALUES ('Dentist', '2026-11-10T14:30', '2026-11-10T15:30', 1, 'x', 'x')")
             conn.commit()
             conn.close()
-            self.assertEqual(db.migrate(path), [2])
+            # Applies 0002 and every later migration; one backup is written first.
+            self.assertEqual(db.migrate(path)[0], 2)
             self.assertEqual(len(list(Path(tmp).glob("calendar.db.pre-v1-*.bak"))), 1)
             c = db.connect(path)
             self.assertEqual(c.execute("SELECT title FROM events").fetchone()[0], "Dentist")

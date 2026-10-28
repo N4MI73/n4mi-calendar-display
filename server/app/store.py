@@ -19,7 +19,10 @@ MAX_TITLE = 120
 MAX_LOCATION = 200
 MAX_NOTES = 2000
 MAX_NAME = 40
-MAX_REMINDER = 7 * 24 * 60  # one week, in minutes
+MAX_REMINDER_DAYS = 30
+MAX_REMINDER = MAX_REMINDER_DAYS * 24 * 60  # 30 days, in minutes
+# Reminder lead times are entered as a number and a unit, and stored as minutes (D43).
+UNITS = {"minutes": 1, "hours": 60, "days": 1440}
 MAX_REMINDER_TEXT = 80
 
 # Default settings, used if a key is somehow missing from the config table.
@@ -141,22 +144,56 @@ def get_category(conn: sqlite3.Connection, category_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-def _parse_reminder(value: str | None, field_name: str, errors: dict[str, str], allow_blank: bool) -> int | None:
+def _parse_reminder(value: str | None, field_name: str, errors: dict[str, str], allow_blank: bool,
+                    unit: str = "minutes") -> int | None:
+    """A lead time entered as a number in `unit` (minutes, hours or days). Returns minutes."""
     value = _clean(value)
+    unit = unit if unit in UNITS else None
+    if unit is None:
+        errors[field_name] = "Choose minutes, hours or days."
+        return None
     if value == "":
         if allow_blank:
             return None
-        errors[field_name] = "Enter the number of minutes."
+        errors[field_name] = f"Enter the number of {unit}."
         return None
     try:
-        minutes = int(value)
+        amount = int(value)
     except ValueError:
-        errors[field_name] = "Use a whole number of minutes."
+        errors[field_name] = f"Use a whole number of {unit}."
         return None
-    if minutes < 0 or minutes > MAX_REMINDER:
-        errors[field_name] = "Use between 0 minutes and one week (10080 minutes)."
+    minutes = amount * UNITS[unit]
+    if amount < 0 or minutes > MAX_REMINDER:
+        errors[field_name] = f"Use between 0 and {MAX_REMINDER_DAYS} days."
         return None
     return minutes
+
+
+def split_minutes(minutes: int | None) -> tuple[str, str]:
+    """Stored minutes back to (amount, unit) in the largest whole unit, for the forms."""
+    if minutes is None:
+        return "", "minutes"
+    if minutes and minutes % 1440 == 0:
+        return str(minutes // 1440), "days"
+    if minutes and minutes % 60 == 0:
+        return str(minutes // 60), "hours"
+    return str(minutes), "minutes"
+
+
+def _parse_days(value: str | None, field_name: str, errors: dict[str, str]) -> int | None:
+    """Whole days (blank = none) for a category's all-day reminder default (D44)."""
+    value = _clean(value)
+    if value == "":
+        return None
+    try:
+        days = int(value)
+    except ValueError:
+        errors[field_name] = "Use a whole number of days, or leave it blank."
+        return None
+    if days < 0 or days > MAX_REMINDER_DAYS:
+        errors[field_name] = f"Use between 0 and {MAX_REMINDER_DAYS} days."
+        return None
+    return days
 
 
 def save_category(
@@ -165,11 +202,16 @@ def save_category(
     color: str,
     default_reminder: str | None,
     category_id: int | None = None,
+    default_unit: str = "minutes",
+    allday_days: str | None = None,
 ) -> int:
-    """default_reminder: minutes as text, or blank for 'no reminder'."""
+    """default_reminder: a number in default_unit, or blank for 'no reminder' (timed events).
+    allday_days: whole days before an all-day event, or blank for none (D44).
+    """
     name, color = _clean(name), _clean(color)
     errors = _validate_name_color(name, color)
-    minutes = _parse_reminder(default_reminder, "default_reminder", errors, allow_blank=True)
+    minutes = _parse_reminder(default_reminder, "default_reminder", errors, allow_blank=True, unit=default_unit)
+    days = _parse_days(allday_days, "allday_days", errors)
     if "name" not in errors:
         clash = conn.execute(
             "SELECT id FROM categories WHERE name = ? COLLATE NOCASE AND id IS NOT ?", (name, category_id)
@@ -181,14 +223,15 @@ def save_category(
     if category_id is None:
         order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM categories").fetchone()[0]
         cur = conn.execute(
-            "INSERT INTO categories (name, color, default_reminder_minutes, sort_order) VALUES (?, ?, ?, ?)",
-            (name, color.upper(), minutes, order),
+            "INSERT INTO categories (name, color, default_reminder_minutes, default_allday_days, sort_order)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (name, color.upper(), minutes, days, order),
         )
         conn.commit()
         return cur.lastrowid
     conn.execute(
-        "UPDATE categories SET name = ?, color = ?, default_reminder_minutes = ? WHERE id = ?",
-        (name, color.upper(), minutes, category_id),
+        "UPDATE categories SET name = ?, color = ?, default_reminder_minutes = ?, default_allday_days = ? WHERE id = ?",
+        (name, color.upper(), minutes, days, category_id),
     )
     conn.commit()
     return category_id
@@ -220,7 +263,8 @@ class EventInput:
     category_id: str = ""
     person_ids: list[str] = field(default_factory=list)
     reminder_mode: str = "default"
-    reminder_minutes: str = ""
+    reminder_minutes: str = ""   # the amount, in reminder_unit (kept under this name for older callers)
+    reminder_unit: str = "minutes"
     # Repeats (Phase 2). See recurrence.Pattern.
     repeat: str = "none"
     interval: str = "1"
@@ -352,13 +396,19 @@ def validate_event(conn: sqlite3.Connection, data: EventInput) -> dict:
     )
     rrule, recurrence_end = _validate_repeat(data.pattern(), start_d, errors)
 
-    # Reminder (D27): category default, none, or a custom number of minutes.
+    # Reminder (D27, D43, D44): category default, none, or a custom lead time.
+    # All-day events take a reminder in whole days.
     mode = data.reminder_mode if data.reminder_mode in ("default", "none", "custom") else None
     reminder_minutes = None
     if mode is None:
         errors["reminder"] = "Choose a reminder option."
     elif mode == "custom":
-        reminder_minutes = _parse_reminder(data.reminder_minutes, "reminder", errors, allow_blank=False)
+        if data.all_day and data.reminder_unit != "days":
+            errors["reminder"] = "For an all-day event, set the reminder in days."
+        else:
+            reminder_minutes = _parse_reminder(
+                data.reminder_minutes, "reminder", errors, allow_blank=False, unit=data.reminder_unit
+            )
 
     if errors:
         raise ValidationError(errors)
@@ -378,23 +428,38 @@ def validate_event(conn: sqlite3.Connection, data: EventInput) -> dict:
     }
 
 
-def save_event(conn: sqlite3.Connection, data: EventInput, event_id: int | None = None) -> int:
-    clean = validate_event(conn, data)
-    now = _now_text()
-    cols = (
+def _event_cols(clean: dict) -> tuple:
+    return (
         clean["title"], clean["location"], clean["notes"], clean["all_day"],
         clean["start_local"], clean["end_local"], clean["category_id"],
         clean["reminder_mode"], clean["reminder_minutes"], clean["rrule"], clean["recurrence_end"],
     )
+
+
+def _insert_event(conn: sqlite3.Connection, clean: dict, now: str) -> int:
+    """Insert a validated event and its people. The caller commits."""
+    cur = conn.execute(
+        "INSERT INTO events (title, location, notes, all_day, start_local, end_local, category_id,"
+        " reminder_mode, reminder_minutes, rrule, recurrence_end, created, updated)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        _event_cols(clean) + (now, now),
+    )
+    conn.executemany(
+        "INSERT INTO event_people (event_id, person_id) VALUES (?, ?)",
+        [(cur.lastrowid, pid) for pid in clean["person_ids"]],
+    )
+    return cur.lastrowid
+
+
+def save_event(conn: sqlite3.Connection, data: EventInput, event_id: int | None = None) -> int:
+    clean = validate_event(conn, data)
+    now = _now_text()
+    cols = _event_cols(clean)
     try:
         if event_id is None:
-            cur = conn.execute(
-                "INSERT INTO events (title, location, notes, all_day, start_local, end_local, category_id,"
-                " reminder_mode, reminder_minutes, rrule, recurrence_end, created, updated)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                cols + (now, now),
-            )
-            event_id = cur.lastrowid
+            event_id = _insert_event(conn, clean, now)
+            conn.commit()
+            return event_id
         else:
             conn.execute(
                 "UPDATE events SET title=?, location=?, notes=?, all_day=?, start_local=?, end_local=?,"
@@ -423,6 +488,107 @@ def delete_event(conn: sqlite3.Connection, event_id: int) -> None:
     conn.commit()
 
 
+# ------------------------------------------- "this and all future" (D46)
+
+
+def _has_earlier_occurrence(event: dict, occ_date: str) -> bool:
+    """Does the series have any occurrence before occ_date?"""
+    before = datetime.combine(timeutil.parse_date(occ_date), datetime.min.time()) - timedelta(seconds=1)
+    return recurrence.latest_on_or_before(
+        event["rrule"], timeutil.parse_local(event["start_local"]), event["recurrence_end"], before
+    ) is not None
+
+
+def future_input(event: dict, occ_date: str) -> EventInput:
+    """Form values for "this and all future": the series as it is, starting on occ_date."""
+    form = event_to_input(event)
+    start = timeutil.parse_local(event["start_local"])
+    new_start = timeutil.parse_date(occ_date)
+    shift = new_start - start.date()
+    form.start_date = new_start.strftime(timeutil.DATE_FMT)
+    form.end_date = (timeutil.parse_local(event["end_local"]).date() + shift).strftime(timeutil.DATE_FMT)
+    return form
+
+
+def _split_plan(conn: sqlite3.Connection, event: dict, occ_date: str, data: EventInput) -> tuple[dict, list, list]:
+    """Validate a "this and all future" change. Returns (clean values, carried, dropped).
+
+    carried / dropped: the series' adjusted or skipped dates on or after occ_date
+    that do / don't still fall on a date of the new pattern.
+    """
+    clean = validate_event(conn, data)
+    new_start = timeutil.parse_local(clean["start_local"])
+    if new_start.date() < timeutil.parse_date(occ_date):
+        raise ValidationError({"start_date": "The changed dates can't start before the date you chose. "
+                                             "To change earlier dates too, edit the whole series."})
+    carried, dropped = [], []
+    for key, exc in get_exceptions(conn, event["id"]).items():
+        if key < occ_date:
+            continue
+        keep = clean["rrule"] and recurrence.is_occurrence(
+            clean["rrule"], new_start, clean["recurrence_end"], timeutil.parse_date(key)
+        )
+        (carried if keep else dropped).append(exc)
+    return clean, carried, dropped
+
+
+def split_dropped(conn: sqlite3.Connection, event_id: int, occ_date: str, data: EventInput) -> list[dict]:
+    """The adjusted or skipped dates that "this and all future" would put back to normal."""
+    event = get_event(conn, event_id)
+    if not _has_earlier_occurrence(event, occ_date):
+        return []
+    return _split_plan(conn, event, occ_date, data)[2]
+
+
+def split_series(conn: sqlite3.Connection, event_id: int, occ_date: str, data: EventInput) -> int:
+    """Change a repeating event from occ_date onward (D46). Returns the id of the series now
+    covering occ_date.
+
+    The original series ends the day before occ_date; a new series with the
+    changes starts on occ_date with the same people. Adjusted or skipped dates
+    that still fall on the new pattern move to the new series; the others go
+    back to normal (callers show them first, via split_dropped). If occ_date is
+    the series' first date, this is simply an edit of the whole series.
+    """
+    event = get_event(conn, event_id)
+    if not _has_earlier_occurrence(event, occ_date):
+        return save_event(conn, data, event_id)
+    clean, carried, _ = _split_plan(conn, event, occ_date, data)
+    now = _now_text()
+    old_end = (timeutil.parse_date(occ_date) - timedelta(days=1)).strftime(timeutil.DATE_FMT)
+    try:
+        conn.execute("UPDATE events SET recurrence_end = ?, updated = ? WHERE id = ?", (old_end, now, event_id))
+        conn.execute("DELETE FROM event_exceptions WHERE event_id = ? AND occ_date >= ?", (event_id, occ_date))
+        new_id = _insert_event(conn, clean, now)
+        conn.executemany(
+            "INSERT INTO event_exceptions (event_id, occ_date, skipped, start_local, end_local, title, location,"
+            " notes, updated) VALUES (?,?,?,?,?,?,?,?,?)",
+            [(new_id, x["occ_date"], x["skipped"], x["start_local"], x["end_local"], x["title"], x["location"],
+              x["notes"], now) for x in carried],
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return new_id
+
+
+def end_series_from(conn: sqlite3.Connection, event_id: int, occ_date: str) -> bool:
+    """Delete occ_date and every later date of a series (D46). Earlier dates stay.
+
+    Returns True if the whole series went (occ_date was its first date).
+    """
+    event = get_event(conn, event_id)
+    if not _has_earlier_occurrence(event, occ_date):
+        delete_event(conn, event_id)
+        return True
+    old_end = (timeutil.parse_date(occ_date) - timedelta(days=1)).strftime(timeutil.DATE_FMT)
+    conn.execute("UPDATE events SET recurrence_end = ?, updated = ? WHERE id = ?", (old_end, _now_text(), event_id))
+    conn.execute("DELETE FROM event_exceptions WHERE event_id = ? AND occ_date >= ?", (event_id, occ_date))
+    conn.commit()
+    return False
+
+
 def _attach_people(conn: sqlite3.Connection, events: list[dict]) -> list[dict]:
     if not events:
         return events
@@ -442,7 +608,8 @@ def _attach_people(conn: sqlite3.Connection, events: list[dict]) -> list[dict]:
 
 _EVENT_SELECT = (
     "SELECT e.*, c.name AS category_name, c.color AS category_color,"
-    " c.default_reminder_minutes AS category_reminder FROM events e JOIN categories c ON c.id = e.category_id"
+    " c.default_reminder_minutes AS category_reminder, c.default_allday_days AS category_allday_days"
+    " FROM events e JOIN categories c ON c.id = e.category_id"
 )
 
 
@@ -647,16 +814,19 @@ def occurrence_to_input(occ: dict) -> OccurrenceInput:
 
 
 def effective_reminder_minutes(event: dict) -> int | None:
-    """Minutes before the start that the banner should appear, or None (D27).
+    """Minutes before the start that the banner should appear, or None (D27, D43, D44).
 
-    All-day events never get a timed reminder.
+    Timed events use the category's default unless the event says otherwise.
+    All-day events use the category's all-day default (whole days, D44), so an
+    all-day event has no reminder unless that default or the event sets one.
     """
-    if event["all_day"]:
-        return None
     if event["reminder_mode"] == "none":
         return None
     if event["reminder_mode"] == "custom":
         return event["reminder_minutes"]
+    if event["all_day"]:
+        days = event.get("category_allday_days")
+        return None if days is None else days * 1440
     return event.get("category_reminder")
 
 
@@ -676,7 +846,8 @@ def event_to_input(event: dict) -> EventInput:
         category_id=str(event["category_id"]),
         person_ids=[str(p["id"]) for p in event["people"]],
         reminder_mode=event["reminder_mode"],
-        reminder_minutes="" if event["reminder_minutes"] is None else str(event["reminder_minutes"]),
+        reminder_minutes=split_minutes(event["reminder_minutes"])[0],
+        reminder_unit="days" if event["all_day"] else split_minutes(event["reminder_minutes"])[1],
         **_pattern_fields(recurrence.pattern_from_rrule(event["rrule"], event["recurrence_end"], start.date())),
     )
 
