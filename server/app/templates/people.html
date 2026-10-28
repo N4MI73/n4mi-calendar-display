@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set active = 'people' %}
+{% block title %}People{% endblock %}
+{% block content %}
+<h1>People</h1>
+<p class="hint">Everyone the calendar is for. Each event can belong to one or more people. The color shows on the display, always with the name.</p>
+
+<ul class="list">
+{% for p in people %}
+  <li class="list-row">
+    <span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>
+    <span class="meta">{{ p.event_count }} event{{ '' if p.event_count == 1 else 's' }}</span>
+    <a class="btn btn-quiet btn-small" href="/people/{{ p.id }}/edit">Edit</a>
+    <form method="post" action="/people/{{ p.id }}/delete" class="inline">
+      <button class="btn btn-quiet btn-small" type="submit" {% if p.event_count %}disabled title="On {{ p.event_count }} event(s); change those first"{% endif %}>Remove</button>
+    </form>
+  </li>
+{% else %}
+  <li class="empty">No people yet. Add the first one below.</li>
+{% endfor %}
+</ul>
+
+<h2>Add a person</h2>
+<form method="post" action="/people" class="form compact" novalidate>
+  <div class="row">
+    <div class="field grow {% if errors.name %}has-error{% endif %}">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" maxlength="40" value="{{ new.name }}" required>
+      {% if errors.name %}<p class="err">{{ errors.name }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.color %}has-error{% endif %}">
+      <label for="color">Color</label>
+      <input id="color" name="color" type="color" value="{{ new.color }}">
+      {% if errors.color %}<p class="err">{{ errors.color }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Add person</button></div>
+</form>
+{% endblock %}

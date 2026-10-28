@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}Events{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'Past events' if show == 'past' else 'Coming up' }}</h1>
+  <a class="btn btn-primary" href="/events/new">+ Add event</a>
+</div>
+
+{% if no_people %}
+<p class="notice">Start by adding the people this calendar is for on the <a href="/people">People</a> page. Every event needs at least one person.</p>
+{% endif %}
+
+<p class="subnav">
+  {% if show == 'past' %}<a href="/">Show upcoming events</a>{% else %}<a href="/?show=past">Show the last 60 days</a>{% endif %}
+</p>
+
+{% if not day_groups %}
+<p class="empty">{{ 'No events in the last 60 days.' if show == 'past' else 'Nothing scheduled yet.' }}</p>
+{% endif %}
+
+{% for label, events in day_groups %}
+<section class="day">
+  <h2>{{ label }}</h2>
+  <ul class="event-list">
+  {% for e in events %}
+    <li class="event">
+      <a class="event-main" href="/events/{{ e.id }}/edit">
+        <span class="when">{{ event_when(e) }}</span>
+        <span class="title">{{ e.title }}</span>
+        {% if e.location %}<span class="location">{{ e.location }}</span>{% endif %}
+        <span class="tags">
+          {% for p in e.people %}<span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>{% endfor %}
+          <span class="pill category"><span class="swatch" style="background: {{ e.category_color }}" aria-hidden="true"></span>{{ e.category_name }}</span>
+        </span>
+      </a>
+      <a class="btn btn-quiet btn-small" href="/events/{{ e.id }}/delete" aria-label="Delete {{ e.title }}">Delete</a>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endblock %}

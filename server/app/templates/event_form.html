@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}{{ 'Edit event' if event_id else 'Add event' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Edit event' if event_id else 'Add event' }}</h1>
+
+{% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
+
+{% if not people %}
+<p class="notice">There are no people yet. <a href="/people">Add the people this calendar is for</a> first; every event needs at least one.</p>
+{% endif %}
+
+<form method="post" class="form" novalidate>
+  <div class="field {% if errors.title %}has-error{% endif %}">
+    <label for="title">What</label>
+    <input id="title" name="title" type="text" maxlength="120" required autofocus value="{{ form.title }}" placeholder="Dentist">
+    {% if errors.title %}<p class="err">{{ errors.title }}</p>{% endif %}
+  </div>
+
+  <fieldset class="field {% if errors.people %}has-error{% endif %}">
+    <legend>Who</legend>
+    <div class="choices">
+    {% for p in people %}
+      <label class="choice">
+        <input type="checkbox" name="people" value="{{ p.id }}" {% if p.id|string in form.person_ids %}checked{% endif %}>
+        <span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>
+      </label>
+    {% endfor %}
+    </div>
+    {% if errors.people %}<p class="err">{{ errors.people }}</p>{% endif %}
+  </fieldset>
+
+  <div class="field">
+    <label class="choice inline">
+      <input type="checkbox" id="all_day" name="all_day" value="1" {% if form.all_day %}checked{% endif %}>
+      All day
+    </label>
+  </div>
+
+  <div class="row">
+    <div class="field {% if errors.start_date %}has-error{% endif %}">
+      <label for="start_date">Starts</label>
+      <input id="start_date" name="start_date" type="date" required value="{{ form.start_date }}">
+      {% if errors.start_date %}<p class="err">{{ errors.start_date }}</p>{% endif %}
+    </div>
+    <div class="field timed {% if errors.start_time %}has-error{% endif %}">
+      <label for="start_time">at</label>
+      <input id="start_time" name="start_time" type="time" value="{{ form.start_time }}">
+      {% if errors.start_time %}<p class="err">{{ errors.start_time }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field {% if errors.end_date %}has-error{% endif %}">
+      <label for="end_date">Ends</label>
+      <input id="end_date" name="end_date" type="date" value="{{ form.end_date }}">
+      {% if errors.end_date %}<p class="err">{{ errors.end_date }}</p>{% endif %}
+    </div>
+    <div class="field timed {% if errors.end_time %}has-error{% endif %}">
+      <label for="end_time">at</label>
+      <input id="end_time" name="end_time" type="time" value="{{ form.end_time }}">
+      {% if errors.end_time %}<p class="err">{{ errors.end_time }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="field {% if errors.category %}has-error{% endif %}">
+    <label for="category_id">Category</label>
+    <select id="category_id" name="category_id">
+    {% for c in categories %}
+      <option value="{{ c.id }}" {% if c.id|string == form.category_id %}selected{% endif %}>{{ c.name }} ({{ fmt_minutes(c.default_reminder_minutes)|lower }})</option>
+    {% endfor %}
+    </select>
+    {% if errors.category %}<p class="err">{{ errors.category }}</p>{% endif %}
+  </div>
+
+  <div class="field">
+    <label for="location">Where <span class="opt">(optional)</span></label>
+    <input id="location" name="location" type="text" maxlength="200" value="{{ form.location }}" placeholder="Dr. Smith, 123 Main St">
+    {% if errors.location %}<p class="err">{{ errors.location }}</p>{% endif %}
+  </div>
+
+  <fieldset class="field {% if errors.reminder %}has-error{% endif %}">
+    <legend>Reminder on the display</legend>
+    <label class="choice"><input type="radio" name="reminder_mode" value="default" {% if form.reminder_mode == 'default' %}checked{% endif %}> Category default</label>
+    <label class="choice"><input type="radio" name="reminder_mode" value="none" {% if form.reminder_mode == 'none' %}checked{% endif %}> No reminder</label>
+    <label class="choice"><input type="radio" name="reminder_mode" value="custom" {% if form.reminder_mode == 'custom' %}checked{% endif %}> Custom:
+      <input class="minutes" name="reminder_minutes" type="number" min="0" max="10080" step="5" inputmode="numeric" value="{{ form.reminder_minutes }}" aria-label="Minutes before"> minutes before</label>
+    <p class="hint">All-day events don't get a timed reminder.</p>
+    {% if errors.reminder %}<p class="err">{{ errors.reminder }}</p>{% endif %}
+  </fieldset>
+
+  <div class="field">
+    <label for="notes">Notes <span class="opt">(optional)</span></label>
+    <textarea id="notes" name="notes" rows="3" maxlength="2000">{{ form.notes }}</textarea>
+    {% if errors.notes %}<p class="err">{{ errors.notes }}</p>{% endif %}
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-quiet" href="/">Cancel</a>
+    {% if event_id %}<a class="btn btn-danger push-right" href="/events/{{ event_id }}/delete">Delete</a>{% endif %}
+  </div>
+</form>
+
+<script>
+// Hide the time boxes for all-day events. The form still works without this.
+(function () {
+  var box = document.getElementById('all_day');
+  function sync() {
+    document.querySelectorAll('.timed').forEach(function (el) { el.hidden = box.checked; });
+  }
+  box.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

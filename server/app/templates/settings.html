@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+{% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
+<form method="post" class="form" novalidate>
+  <h2>Shelf display</h2>
+  <div class="field {% if errors.upcoming_days %}has-error{% endif %}">
+    <label for="upcoming_days">"Coming up" shows this many days ahead</label>
+    <input id="upcoming_days" name="upcoming_days" type="number" min="1" max="60" inputmode="numeric" value="{{ cfg.upcoming_days }}">
+    {% if errors.upcoming_days %}<p class="err">{{ errors.upcoming_days }}</p>{% endif %}
+  </div>
+  <div class="field {% if errors.stale_minutes %}has-error{% endif %}">
+    <label for="stale_minutes">Show "Not updated" after this many minutes without contact</label>
+    <input id="stale_minutes" name="stale_minutes" type="number" min="5" max="1440" inputmode="numeric" value="{{ cfg.stale_minutes }}">
+    {% if errors.stale_minutes %}<p class="err">{{ errors.stale_minutes }}</p>{% endif %}
+  </div>
+
+  <h2>Night mode</h2>
+  <p class="hint">The screen goes dark between these times. A touch wakes it briefly.
+    {% if dark_off %}<strong>Start and end are the same, so night mode is off.</strong>
+    {% elif crosses_midnight %}These hours cross midnight, which is fine.{% endif %}</p>
+  <div class="row">
+    <div class="field {% if errors.dark_start %}has-error{% endif %}">
+      <label for="dark_start">Dark from</label>
+      <input id="dark_start" name="dark_start" type="time" value="{{ cfg.dark_start }}">
+      {% if errors.dark_start %}<p class="err">{{ errors.dark_start }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.dark_end %}has-error{% endif %}">
+      <label for="dark_end">until</label>
+      <input id="dark_end" name="dark_end" type="time" value="{{ cfg.dark_end }}">
+      {% if errors.dark_end %}<p class="err">{{ errors.dark_end }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="field {% if errors.wake_seconds %}has-error{% endif %}">
+    <label for="wake_seconds">A touch wakes the screen for this many seconds</label>
+    <input id="wake_seconds" name="wake_seconds" type="number" min="10" max="900" inputmode="numeric" value="{{ cfg.wake_seconds }}">
+    {% if errors.wake_seconds %}<p class="err">{{ errors.wake_seconds }}</p>{% endif %}
+  </div>
+
+  <div class="actions"><button class="btn btn-primary" type="submit">Save settings</button></div>
+</form>
+<p class="hint">These settings take effect on the shelf display once its page is built (Phase 2).</p>
+{% endblock %}

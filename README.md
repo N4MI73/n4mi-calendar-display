@@ -1,2 +1,35 @@
-# n4mi-calendar-display
-Self-hosted household calendar: server, editor and shelf display
+# N4MI Calendar Display
+
+A self-hosted household calendar: a small server on the home network, a
+browser editor that also works on a phone, and a shelf-mounted touch display
+(Raspberry Pi 5 running Chromium in kiosk mode).
+
+It is independent of Google, Apple and other cloud calendars. Google Calendar
+is used only as a read-only import source, and only when the owner starts an
+import (a later phase).
+
+## What's here
+
+| Folder | Contents |
+| --- | --- |
+| `server/` | The calendar server (Python, FastAPI, SQLite), the editor pages, tests, Dockerfile and compose file. See [`server/README.md`](server/README.md). |
+| `.github/workflows/` | Tests the server, then builds its Docker image and publishes it to GitHub Container Registry. |
+| `docs/` | Setup and reference notes (added as the project grows). |
+| `display/` | Raspberry Pi kiosk and autostart configuration (a later phase). |
+
+## Status
+
+- **Phase 1 (server core and editor):** events with one or more people, a
+  category and an optional location; people and categories; display settings.
+- **Next:** the shelf display page and its JSON API, then Google import and
+  review, then recurring events.
+
+## Privacy
+
+This repository holds code only. Real calendar data, database files, exports,
+backups and import URLs are never committed. Tests and screenshots use
+fictional data.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

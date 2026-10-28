@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}Delete event{% endblock %}
+{% block content %}
+<h1>Delete this event?</h1>
+<div class="card">
+  <p class="title">{{ event.title }}</p>
+  <p>{{ event_date(event) }} · {{ event_when(event) }}</p>
+  <p>{% for p in event.people %}<span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>{% endfor %}
+     <span class="pill category"><span class="swatch" style="background: {{ event.category_color }}" aria-hidden="true"></span>{{ event.category_name }}</span></p>
+</div>
+<form method="post" class="actions">
+  <button class="btn btn-danger" type="submit">Delete</button>
+  <a class="btn btn-quiet" href="/">Keep it</a>
+</form>
+{% endblock %}

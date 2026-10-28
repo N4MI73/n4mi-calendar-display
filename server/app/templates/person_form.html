@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% set active = 'people' %}
+{% block title %}Edit person{% endblock %}
+{% block content %}
+<h1>Edit person</h1>
+<form method="post" class="form compact" novalidate>
+  <div class="row">
+    <div class="field grow {% if errors.name %}has-error{% endif %}">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" maxlength="40" value="{{ person.name }}" required autofocus>
+      {% if errors.name %}<p class="err">{{ errors.name }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.color %}has-error{% endif %}">
+      <label for="color">Color</label>
+      <input id="color" name="color" type="color" value="{{ person.color }}">
+      {% if errors.color %}<p class="err">{{ errors.color }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-quiet" href="/people">Cancel</a>
+  </div>
+</form>
+{% endblock %}

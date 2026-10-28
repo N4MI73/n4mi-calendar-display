@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<meta name="color-scheme" content="dark">
+<title>{% block title %}Calendar{% endblock %} · N4MI Calendar</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Calendar">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/static/editor.css?v={{ app_version }}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">Calendar</a>
+  <nav aria-label="Main">
+    <a href="/" {% if active == 'events' %}aria-current="page"{% endif %}>Events</a>
+    <a href="/people" {% if active == 'people' %}aria-current="page"{% endif %}>People</a>
+    <a href="/categories" {% if active == 'categories' %}aria-current="page"{% endif %}>Categories</a>
+    <a href="/settings" {% if active == 'settings' %}aria-current="page"{% endif %}>Settings</a>
+  </nav>
+</header>
+<main>
+  {% if msg %}<p class="flash" role="status">{{ msg }}</p>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot">N4MI Calendar Display · v{{ app_version }}</footer>
+</body>
+</html>

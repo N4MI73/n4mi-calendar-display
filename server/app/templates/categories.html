@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set active = 'categories' %}
+{% block title %}Categories{% endblock %}
+{% block content %}
+<h1>Categories</h1>
+<p class="hint">What kind of event it is. Each category has a color and a default reminder, which an event can override.</p>
+
+<ul class="list">
+{% for c in categories %}
+  <li class="list-row">
+    <span class="pill category"><span class="swatch" style="background: {{ c.color }}" aria-hidden="true"></span>{{ c.name }}</span>
+    <span class="meta">{{ fmt_minutes(c.default_reminder_minutes) }} · {{ c.event_count }} event{{ '' if c.event_count == 1 else 's' }}</span>
+    <a class="btn btn-quiet btn-small" href="/categories/{{ c.id }}/edit">Edit</a>
+    <form method="post" action="/categories/{{ c.id }}/delete" class="inline">
+      <button class="btn btn-quiet btn-small" type="submit" {% if c.event_count %}disabled title="Used by {{ c.event_count }} event(s); change those first"{% endif %}>Remove</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+
+<h2>Add a category</h2>
+<form method="post" action="/categories" class="form compact" novalidate>
+  <div class="row">
+    <div class="field grow {% if errors.name %}has-error{% endif %}">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" maxlength="40" value="{{ new.name }}" required>
+      {% if errors.name %}<p class="err">{{ errors.name }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.color %}has-error{% endif %}">
+      <label for="color">Color</label>
+      <input id="color" name="color" type="color" value="{{ new.color }}">
+      {% if errors.color %}<p class="err">{{ errors.color }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="field {% if errors.default_reminder %}has-error{% endif %}">
+    <label for="default_reminder">Default reminder, minutes before <span class="opt">(leave blank for none)</span></label>
+    <input id="default_reminder" name="default_reminder" type="number" min="0" max="10080" step="5" inputmode="numeric" value="{{ new.default_reminder }}">
+    {% if errors.default_reminder %}<p class="err">{{ errors.default_reminder }}</p>{% endif %}
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Add category</button></div>
+</form>
+{% endblock %}
