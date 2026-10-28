@@ -21,8 +21,10 @@ import (a later phase).
 
 - **Phase 1 (server core and editor):** events with one or more people, a
   category and an optional location; people and categories; display settings.
-- **Next:** the shelf display page and its JSON API, then Google import and
-  review, then recurring events.
+- **Phase 2:** repeating events (with skip or change of a single date) and
+  household "I did it" reminders.
+- **Next:** the shelf display page and its JSON API, then on-screen actions,
+  then Google import and review.
 
 ## Privacy
 

@@ -175,3 +175,28 @@ fieldset .choice { margin-right: 1rem; }
   .actions .btn { flex: 1 1 auto; }
   .push-right { margin-left: 0; }
 }
+
+/* ---------- Phase 2: repeats and reminders ---------- */
+[hidden] { display: none !important; }
+.repeat { gap: 0.6rem; }
+.repeat-part { display: grid; gap: 0.5rem; }
+.repeat-part.hint { margin: 0; }
+.repeat-part > p.hint { margin: 0; }
+.choices.days .choice { min-width: 4.6rem; }
+.event .repeats { color: #C3C8D1; }
+.exceptions { margin-top: 2rem; }
+.exceptions h2 { font-size: 1.05rem; }
+.plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.plain-list li {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem;
+}
+.plain-list form { margin: 0; }
+.reminder .status { color: var(--muted); font-size: 0.95rem; }
+.reminder.is-showing { border-color: var(--ok); }
+.reminder.is-paused .title { color: var(--muted); }
+.reminder > form { align-self: center; margin: 0 0.5rem 0 0; }
+.pill.showing { background: #17301F; color: #B9F0C6; border: 1px solid var(--ok); }
+.undo { margin: -0.25rem 0 1rem; }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+.actions form { margin: 0; }

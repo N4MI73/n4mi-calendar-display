@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set active = 'reminders' %}
+{% block title %}Reminders{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Reminders</h1>
+  <a class="btn btn-primary" href="/reminders/new">+ Add reminder</a>
+</div>
+<p class="hint">Household jobs that come round regularly. Each one shows on the display until someone taps “I did it”.</p>
+
+{% if undo_id %}
+<form method="post" action="/reminders/{{ undo_id }}/undo" class="undo">
+  <button class="btn btn-quiet btn-small" type="submit">Undo</button>
+</form>
+{% endif %}
+
+{% if not reminders %}<p class="empty">No reminders yet.</p>{% endif %}
+
+<ul class="event-list">
+{% for r in reminders %}
+  <li class="event reminder {% if r.showing %}is-showing{% endif %} {% if not r.active %}is-paused{% endif %}">
+    <a class="event-main" href="/reminders/{{ r.id }}/edit">
+      <span class="title">{{ r.text }}</span>
+      <span class="when">{{ r.description }}, from {{ r.appears }}{% if r.carry_over %} · stays until done{% else %} · that day only{% endif %}</span>
+      <span class="status">
+        {% if not r.active %}<span class="pill">Paused</span>
+        {% elif r.showing %}<span class="pill showing">Showing now</span>
+        {% elif r.next_at %}Next: {{ fmt_when(r.next_at) }}
+        {% else %}No more dates{% endif %}
+        {% if r.last_done_at %} · Last done {{ fmt_when(r.last_done_at) }}{% endif %}
+      </span>
+    </a>
+    {% if r.showing %}
+    <form method="post" action="/reminders/{{ r.id }}/done">
+      <button class="btn btn-primary btn-small" type="submit">I did it</button>
+    </form>
+    {% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% endblock %}

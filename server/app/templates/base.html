@@ -20,6 +20,7 @@
   <a class="brand" href="/">Calendar</a>
   <nav aria-label="Main">
     <a href="/" {% if active == 'events' %}aria-current="page"{% endif %}>Events</a>
+    <a href="/reminders" {% if active == 'reminders' %}aria-current="page"{% endif %}>Reminders</a>
     <a href="/people" {% if active == 'people' %}aria-current="page"{% endif %}>People</a>
     <a href="/categories" {% if active == 'categories' %}aria-current="page"{% endif %}>Categories</a>
     <a href="/settings" {% if active == 'settings' %}aria-current="page"{% endif %}>Settings</a>

@@ -25,8 +25,9 @@
   <ul class="event-list">
   {% for e in events %}
     <li class="event">
-      <a class="event-main" href="/events/{{ e.id }}/edit">
-        <span class="when">{{ event_when(e) }}</span>
+      {% set href = '/events/%d/occurrence/%s' % (e.id, e.occ_date) if e.recurring else '/events/%d/edit' % e.id %}
+      <a class="event-main" href="{{ href }}">
+        <span class="when">{{ event_when(e) }}{% if e.recurring %} · <span class="repeats">{{ 'Changed this time' if e.changed else 'Repeats' }}</span>{% endif %}</span>
         <span class="title">{{ e.title }}</span>
         {% if e.location %}<span class="location">{{ e.location }}</span>{% endif %}
         <span class="tags">
@@ -34,7 +35,7 @@
           <span class="pill category"><span class="swatch" style="background: {{ e.category_color }}" aria-hidden="true"></span>{{ e.category_name }}</span>
         </span>
       </a>
-      <a class="btn btn-quiet btn-small" href="/events/{{ e.id }}/delete" aria-label="Delete {{ e.title }}">Delete</a>
+      <a class="btn btn-quiet btn-small" href="{{ href if e.recurring else '/events/%d/delete' % e.id }}" aria-label="Delete {{ e.title }}">Delete</a>
     </li>
   {% endfor %}
   </ul>

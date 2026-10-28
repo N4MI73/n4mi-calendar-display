@@ -1,8 +1,9 @@
-"""N4MI Calendar Display — server (Phase 1: core and editor).
+"""N4MI Calendar Display — server.
 
-A FastAPI app with a server-rendered editor for events, people, categories and
-settings. LAN only, no login (decision D10). The display page and its JSON API
-arrive in Phase 2.
+A FastAPI app with a server-rendered editor for events (including repeating
+ones), household "I did it" reminders, people, categories and settings.
+LAN only, no login (decision D10). The display page and its JSON API arrive
+in Phase 3.
 
 Run locally:  uvicorn app.main:app --port 8087
 Environment:  CAL_DB_PATH (default /data/calendar.db), TZ (default America/New_York)
@@ -13,7 +14,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from collections import OrderedDict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -22,9 +23,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, store, timeutil
+from . import db, recurrence, store, timeutil
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 BASE_DIR = Path(__file__).parent
 
 
@@ -60,6 +61,24 @@ def _event_date(event: dict) -> str:
     return f"{d.strftime('%a, %b')} {d.day}, {d.year}"
 
 
+def _event_start_date(event: dict) -> date:
+    return timeutil.parse_local(event["start_local"]).date()
+
+
+def _fmt_when(value) -> str:
+    """'Mon, Nov 2, 6:00 AM' for a datetime or stored local text."""
+    dt = timeutil.parse_local(value) if isinstance(value, str) else value
+    text = f"{dt.strftime('%a, %b')} {dt.day}"
+    if dt.year != timeutil.now_local().year:
+        text += f", {dt.year}"
+    return text + ", " + timeutil.fmt_time(dt)
+
+
+def _date_label(d: str) -> str:
+    x = timeutil.parse_date(d)
+    return f"{x.strftime('%a, %b')} {x.day}, {x.year}"
+
+
 def create_app(db_path: str | None = None) -> FastAPI:
     db_path = db_path or os.environ.get("CAL_DB_PATH", "/data/calendar.db")
     db.migrate(db_path)
@@ -74,6 +93,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
         fmt_minutes=_fmt_minutes,
         event_when=_event_when,
         event_date=_event_date,
+        event_start_date=_event_start_date,
+        describe=recurrence.describe,
+        fmt_when=_fmt_when,
     )
 
     def conn() -> sqlite3.Connection:
@@ -139,6 +161,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
         day_groups = [(timeutil.fmt_day(d, today), evs) for d, evs in groups.items()]
         return render(request, "events.html", day_groups=day_groups, show=show, no_people=not people)
 
+    def _exception_rows(c, event_id):
+        event = store.get_event(c, event_id)
+        if not event or not event["rrule"]:
+            return []
+        rows = []
+        for occ_date, x in store.get_exceptions(c, event_id).items():
+            change = ""
+            if not x["skipped"] and x["start_local"]:
+                change = f"{_event_date(x)} · {_event_when(dict(x, all_day=event['all_day']))}"
+            rows.append({"occ_date": occ_date, "label": _date_label(occ_date), "skipped": x["skipped"], "change": change})
+        return rows
+
     def _event_form_page(request, c, form: store.EventInput, event_id=None, errors=None, status=200):
         return render(
             request,
@@ -149,6 +183,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             errors=errors or {},
             people=store.list_people(c),
             categories=store.list_categories(c),
+            exceptions=_exception_rows(c, event_id) if event_id else [],
         )
 
     def _form_to_input(form) -> store.EventInput:
@@ -165,6 +200,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
             person_ids=form.getlist("people"),
             reminder_mode=form.get("reminder_mode", "default"),
             reminder_minutes=form.get("reminder_minutes", ""),
+            **_repeat_from_form(form, default="none"),
+        )
+
+    def _repeat_from_form(form, default):
+        return dict(
+            repeat=form.get("repeat", default),
+            interval=form.get("interval", "1"),
+            weekdays=form.getlist("weekdays"),
+            ordinals=form.getlist("ordinals"),
+            nth_weekday=form.get("nth_weekday", ""),
+            until=form.get("until", ""),
+            custom_rrule=form.get("custom_rrule", ""),
         )
 
     @app.get("/events/new", response_class=HTMLResponse)
@@ -183,6 +230,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 end_time=(start + timedelta(hours=1)).strftime("%H:%M"),
                 category_id=str(default_cat["id"]) if default_cat else "",
                 person_ids=[str(people[0]["id"])] if len(people) == 1 else [],
+                **store.repeat_defaults(start.strftime(timeutil.DATE_FMT)),
             )
             return _event_form_page(request, c, form)
         finally:
@@ -248,6 +296,199 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         return redirect("/", f"Deleted “{event['title']}”." if event else "That event no longer exists.")
+
+    # ------------------------------------------------- one date of a series
+
+    def _load_occurrence(c, event_id, occ_date):
+        event = store.get_event(c, event_id)
+        occ = store.get_occurrence(c, event_id, occ_date) if event else None
+        return event, occ
+
+    @app.get("/events/{event_id}/occurrence/{occ_date}", response_class=HTMLResponse)
+    def occurrence_page(request: Request, event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+        finally:
+            c.close()
+        if not occ:
+            return redirect("/", "That date is no longer part of the series.")
+        return render(request, "occurrence.html", event=event, occ=occ)
+
+    def _occurrence_form(request, event, occ_date, form, errors=None, status=200):
+        return render(
+            request, "occurrence_form.html", status_code=status, event=event, occ_date=occ_date,
+            form=form, errors=errors or {}, original_label=_date_label(occ_date),
+        )
+
+    @app.get("/events/{event_id}/occurrence/{occ_date}/edit", response_class=HTMLResponse)
+    def occurrence_edit(request: Request, event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+        finally:
+            c.close()
+        if not occ:
+            return redirect("/", "That date is no longer part of the series.")
+        return _occurrence_form(request, event, occ_date, store.occurrence_to_input(occ))
+
+    @app.post("/events/{event_id}/occurrence/{occ_date}/edit", response_class=HTMLResponse)
+    async def occurrence_update(request: Request, event_id: int, occ_date: str):
+        f = await request.form()
+        form = store.OccurrenceInput(**{k: f.get(k, "") for k in store.OccurrenceInput.__dataclass_fields__})
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+            if not occ:
+                return redirect("/", "That date is no longer part of the series.")
+            try:
+                store.change_occurrence(c, event, occ_date, form)
+            except store.ValidationError as exc:
+                return _occurrence_form(request, event, occ_date, form, exc.errors, status=400)
+        finally:
+            c.close()
+        return redirect("/", f"Changed “{form.title.strip()}” for {_date_label(occ_date)} only.")
+
+    @app.post("/events/{event_id}/occurrence/{occ_date}/skip")
+    def occurrence_skip(event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event, occ = _load_occurrence(c, event_id, occ_date)
+            if occ:
+                store.skip_occurrence(c, event_id, occ_date)
+        finally:
+            c.close()
+        if not occ:
+            return redirect("/", "That date is no longer part of the series.")
+        return redirect("/", f"Skipped “{event['title']}” on {_date_label(occ_date)}.")
+
+    @app.post("/events/{event_id}/occurrence/{occ_date}/restore")
+    def occurrence_restore(event_id: int, occ_date: str):
+        c = conn()
+        try:
+            event = store.get_event(c, event_id)
+            if event:
+                store.restore_occurrence(c, event_id, occ_date)
+        finally:
+            c.close()
+        if not event:
+            return redirect("/", "That event no longer exists.")
+        return redirect(f"/events/{event_id}/edit", f"{_date_label(occ_date)} is back to normal.")
+
+    # ------------------------------------------------------------ reminders
+
+    def _dark_end_label(c):
+        return timeutil.fmt_time(timeutil.parse_time(store.get_config(c)["dark_end"]))
+
+    def _reminder_form(request, c, form, reminder_id=None, errors=None, status=200):
+        return render(
+            request, "reminder_form.html", status_code=status, form=form, reminder_id=reminder_id,
+            errors=errors or {}, dark_end_label=_dark_end_label(c),
+        )
+
+    def _reminder_input(f) -> store.ReminderInput:
+        return store.ReminderInput(
+            text=f.get("text", ""),
+            start_date=f.get("start_date", ""),
+            appear_time=f.get("appear_time", ""),
+            carry_over=f.get("carry_over") == "1",
+            active=f.get("paused") != "1",
+            **_repeat_from_form(f, default="weekly"),
+        )
+
+    @app.get("/reminders", response_class=HTMLResponse)
+    def reminders_page(request: Request, undo: int | None = None):
+        c = conn()
+        try:
+            reminders = store.list_reminders(c)
+        finally:
+            c.close()
+        return render(request, "reminders.html", reminders=reminders, undo_id=undo)
+
+    @app.get("/reminders/new", response_class=HTMLResponse)
+    def reminder_new(request: Request):
+        today = timeutil.now_local().date().strftime(timeutil.DATE_FMT)
+        defaults = store.repeat_defaults(today)
+        defaults["repeat"] = "weekly"
+        c = conn()
+        try:
+            return _reminder_form(request, c, store.ReminderInput(start_date=today, **defaults))
+        finally:
+            c.close()
+
+    @app.post("/reminders/new", response_class=HTMLResponse)
+    async def reminder_create(request: Request):
+        form = _reminder_input(await request.form())
+        c = conn()
+        try:
+            try:
+                store.save_reminder(c, form)
+            except store.ValidationError as exc:
+                return _reminder_form(request, c, form, errors=exc.errors, status=400)
+        finally:
+            c.close()
+        return redirect("/reminders", f"Saved “{form.text.strip()}”.")
+
+    @app.get("/reminders/{reminder_id}/edit", response_class=HTMLResponse)
+    def reminder_edit(request: Request, reminder_id: int):
+        c = conn()
+        try:
+            rem = store.get_reminder(c, reminder_id)
+            if not rem:
+                return redirect("/reminders", "That reminder no longer exists.")
+            return _reminder_form(request, c, store.reminder_to_input(rem), reminder_id)
+        finally:
+            c.close()
+
+    @app.post("/reminders/{reminder_id}/edit", response_class=HTMLResponse)
+    async def reminder_update(request: Request, reminder_id: int):
+        form = _reminder_input(await request.form())
+        c = conn()
+        try:
+            if not store.get_reminder(c, reminder_id):
+                return redirect("/reminders", "That reminder no longer exists.")
+            try:
+                store.save_reminder(c, form, reminder_id)
+            except store.ValidationError as exc:
+                return _reminder_form(request, c, form, reminder_id, exc.errors, status=400)
+        finally:
+            c.close()
+        return redirect("/reminders", f"Saved “{form.text.strip()}”.")
+
+    @app.post("/reminders/{reminder_id}/delete")
+    def reminder_delete(reminder_id: int):
+        c = conn()
+        try:
+            rem = store.get_reminder(c, reminder_id)
+            if rem:
+                store.delete_reminder(c, reminder_id)
+        finally:
+            c.close()
+        return redirect("/reminders", f"Deleted “{rem['text']}”." if rem else "That reminder no longer exists.")
+
+    @app.post("/reminders/{reminder_id}/done")
+    def reminder_done(reminder_id: int):
+        c = conn()
+        try:
+            rem = store.get_reminder(c, reminder_id)
+            ok = store.mark_reminder_done(c, reminder_id) if rem else False
+        finally:
+            c.close()
+        if not ok:
+            return redirect("/reminders", "That reminder isn't showing right now.")
+        return RedirectResponse(
+            "/reminders?" + urlencode({"msg": f"Done: “{rem['text']}”.", "undo": reminder_id}), status_code=303
+        )
+
+    @app.post("/reminders/{reminder_id}/undo")
+    def reminder_undo(reminder_id: int):
+        c = conn()
+        try:
+            rem = store.get_reminder(c, reminder_id)
+            ok = store.undo_reminder_done(c, reminder_id) if rem else False
+        finally:
+            c.close()
+        return redirect("/reminders", f"Undone: “{rem['text']}” is back." if ok else "Nothing to undo.")
 
     # ------------------------------------------------------------ people
 

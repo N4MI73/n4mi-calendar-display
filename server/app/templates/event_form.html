@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "_repeat.html" import repeat_fields %}
 {% set active = 'events' %}
 {% block title %}{{ 'Edit event' if event_id else 'Add event' }}{% endblock %}
 {% block content %}
-<h1>{{ 'Edit event' if event_id else 'Add event' }}</h1>
+<h1>{{ ('Edit the whole series' if form.repeat != 'none' else 'Edit event') if event_id else 'Add event' }}</h1>
+{% if event_id and form.repeat != 'none' %}<p class="hint">Changes here apply to every occurrence. To change just one date, open that date from the Events list.</p>{% endif %}
 
 {% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
 
@@ -63,6 +65,8 @@
     </div>
   </div>
 
+  {{ repeat_fields(form, errors) }}
+
   <div class="field {% if errors.category %}has-error{% endif %}">
     <label for="category_id">Category</label>
     <select id="category_id" name="category_id">
@@ -98,9 +102,25 @@
   <div class="actions">
     <button class="btn btn-primary" type="submit">Save</button>
     <a class="btn btn-quiet" href="/">Cancel</a>
-    {% if event_id %}<a class="btn btn-danger push-right" href="/events/{{ event_id }}/delete">Delete</a>{% endif %}
+    {% if event_id %}<a class="btn btn-danger push-right" href="/events/{{ event_id }}/delete">{{ 'Delete series' if form.repeat != 'none' else 'Delete' }}</a>{% endif %}
   </div>
 </form>
+
+{% if exceptions %}
+<section class="exceptions">
+  <h2>Changed or skipped dates</h2>
+  <ul class="plain-list">
+  {% for x in exceptions %}
+    <li>
+      <span><strong>{{ x.label }}</strong> — {{ 'skipped' if x.skipped else 'changed to ' ~ x.change }}</span>
+      <form method="post" action="/events/{{ event_id }}/occurrence/{{ x.occ_date }}/restore">
+        <button class="btn btn-quiet btn-small" type="submit">Put back as normal</button>
+      </form>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <script>
 // Hide the time boxes for all-day events. The form still works without this.

@@ -1,0 +1,71 @@
+{# Repeat-pattern fields, shared by the event form and the reminder form.
+   `form` has repeat, interval, weekdays, ordinals, nth_weekday, until, custom_rrule. #}
+{% macro repeat_fields(form, errors, allow_none=True, start_label='start date') %}
+{% set wd = [('MO','Mon'),('TU','Tue'),('WE','Wed'),('TH','Thu'),('FR','Fri'),('SA','Sat'),('SU','Sun')] %}
+{% set wd_full = [('MO','Monday'),('TU','Tuesday'),('WE','Wednesday'),('TH','Thursday'),('FR','Friday'),('SA','Saturday'),('SU','Sunday')] %}
+<fieldset class="field repeat {% if errors.repeat or errors.until %}has-error{% endif %}">
+  <legend>Repeats</legend>
+  <select id="repeat" name="repeat" aria-label="How it repeats">
+    {% if allow_none %}<option value="none" {% if form.repeat == 'none' %}selected{% endif %}>Doesn't repeat</option>{% endif %}
+    <option value="weekly" {% if form.repeat == 'weekly' %}selected{% endif %}>Weekly</option>
+    <option value="monthly_nth" {% if form.repeat == 'monthly_nth' %}selected{% endif %}>Monthly, by weekday (1st Tue…)</option>
+    <option value="monthly_date" {% if form.repeat == 'monthly_date' %}selected{% endif %}>Monthly, by date</option>
+    <option value="yearly" {% if form.repeat == 'yearly' %}selected{% endif %}>Yearly</option>
+    {% if form.repeat == 'custom' %}<option value="custom" selected>Keep the pattern set elsewhere</option>{% endif %}
+  </select>
+  <input type="hidden" name="custom_rrule" value="{{ form.custom_rrule }}">
+
+  <div class="repeat-part" data-for="weekly">
+    <select name="interval" aria-label="How often">
+      <option value="1" {% if form.interval != '2' %}selected{% endif %}>Every week</option>
+      <option value="2" {% if form.interval == '2' %}selected{% endif %}>Every other week</option>
+    </select>
+    <div class="choices days">
+      {% for code, name in wd %}
+      <label class="choice"><input type="checkbox" name="weekdays" value="{{ code }}" {% if code in form.weekdays %}checked{% endif %}> {{ name }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="repeat-part" data-for="monthly_nth">
+    <p class="hint">On the</p>
+    <div class="choices days">
+      {% for code, name in [('1','1st'),('2','2nd'),('3','3rd'),('4','4th'),('5','5th'),('-1','Last')] %}
+      <label class="choice"><input type="checkbox" name="ordinals" value="{{ code }}" {% if code in form.ordinals %}checked{% endif %}> {{ name }}</label>
+      {% endfor %}
+    </div>
+    <select name="nth_weekday" aria-label="Day of the week">
+      {% for code, name in wd_full %}
+      <option value="{{ code }}" {% if form.nth_weekday == code %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">of every month. A 5th weekday only happens in some months.</p>
+  </div>
+
+  <p class="repeat-part hint" data-for="monthly_date">On the same date as the {{ start_label }}, every month.</p>
+  <p class="repeat-part hint" data-for="yearly">On the same date as the {{ start_label }}, every year.</p>
+  {% if form.repeat == 'custom' %}<p class="repeat-part hint" data-for="custom">This pattern came from elsewhere and is kept as it is. Choose another option to replace it.</p>{% endif %}
+
+  <div class="repeat-part" data-for="repeating">
+    <label for="until">Last date <span class="opt">(optional)</span></label>
+    <input id="until" name="until" type="date" value="{{ form.until }}">
+    <p class="hint">Leave blank to keep repeating.</p>
+  </div>
+  {% if errors.repeat %}<p class="err">{{ errors.repeat }}</p>{% endif %}
+  {% if errors.until %}<p class="err">{{ errors.until }}</p>{% endif %}
+</fieldset>
+<script>
+// Show only the parts for the chosen pattern. The form still works without this.
+(function () {
+  var sel = document.getElementById('repeat');
+  function sync() {
+    document.querySelectorAll('.repeat-part').forEach(function (el) {
+      var f = el.getAttribute('data-for');
+      el.hidden = !(f === sel.value || (f === 'repeating' && sel.value !== 'none'));
+    });
+  }
+  sel.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endmacro %}

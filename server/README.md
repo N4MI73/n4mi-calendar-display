@@ -3,6 +3,9 @@
 FastAPI + SQLite. Serves the editor (works on a computer or a phone) and, in a
 later phase, the shelf display page and its JSON API.
 
+The editor manages events (one-off and repeating), household "I did it"
+reminders, people, categories and display settings.
+
 ## Running it
 
 | | |
@@ -71,6 +74,23 @@ pulls a finished image (`pull_policy: always`).
 - The host's nightly backup copies the database. Test one restore after the
   first nightly backup has run.
 - Never commit a database, export or backup to this repository.
+
+## Repeating events and reminders
+
+- Repeat patterns are stored as standard iCalendar RRULE text (the form
+  Google uses), with the series' first date and optional last date in their
+  own columns. The editor offers weekly (every week or every other week, on
+  chosen days), monthly on the 1st–5th or last weekday, monthly on a date,
+  and yearly. Expansion uses `python-dateutil`, so any valid RRULE (for
+  example one imported later) still works; the editor shows it as "set
+  elsewhere".
+- One date of a series can be skipped or changed (time, place, title, notes)
+  without touching the others. These are kept in `event_exceptions`, keyed by
+  the date the occurrence originally fell on.
+- Household reminders show from their appear time (default: the end of night
+  mode) until someone taps "I did it". With carry-over off they disappear at
+  the end of their day; with it on they stay until done, as a single item.
+  "Undo" restores the previous state.
 
 ## Times
 

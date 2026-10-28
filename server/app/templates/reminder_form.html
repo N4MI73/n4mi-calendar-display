@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_repeat.html" import repeat_fields %}
+{% set active = 'reminders' %}
+{% block title %}{{ 'Edit reminder' if reminder_id else 'Add reminder' }}{% endblock %}
+{% block content %}
+<h1>{{ 'Edit reminder' if reminder_id else 'Add reminder' }}</h1>
+{% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
+<form method="post" class="form" novalidate>
+  <div class="field {% if errors.text %}has-error{% endif %}">
+    <label for="text">Reminder</label>
+    <input id="text" name="text" type="text" maxlength="80" required autofocus value="{{ form.text }}" placeholder="Garbage cans to the curb">
+    {% if errors.text %}<p class="err">{{ errors.text }}</p>{% endif %}
+  </div>
+
+  <div class="row">
+    <div class="field {% if errors.start_date %}has-error{% endif %}">
+      <label for="start_date">First date</label>
+      <input id="start_date" name="start_date" type="date" required value="{{ form.start_date }}">
+      {% if errors.start_date %}<p class="err">{{ errors.start_date }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.appear_time %}has-error{% endif %}">
+      <label for="appear_time">Shows from <span class="opt">(optional)</span></label>
+      <input id="appear_time" name="appear_time" type="time" value="{{ form.appear_time }}">
+      {% if errors.appear_time %}<p class="err">{{ errors.appear_time }}</p>{% endif %}
+    </div>
+  </div>
+  <p class="hint">Leave “Shows from” blank to show it when night mode ends ({{ dark_end_label }}).</p>
+
+  {{ repeat_fields(form, errors, allow_none=False, start_label='first date') }}
+
+  <fieldset class="field">
+    <legend>If nobody does it that day</legend>
+    <label class="choice"><input type="radio" name="carry_over" value="0" {% if not form.carry_over %}checked{% endif %}> Take it off the display at the end of the day</label>
+    <label class="choice"><input type="radio" name="carry_over" value="1" {% if form.carry_over %}checked{% endif %}> Keep showing it until someone taps “I did it”</label>
+  </fieldset>
+
+  <div class="field">
+    <label class="choice inline"><input type="checkbox" name="paused" value="1" {% if not form.active %}checked{% endif %}> Paused (don't show it for now)</label>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-quiet" href="/reminders">Cancel</a>
+  </div>
+</form>
+{% if reminder_id %}
+<form method="post" action="/reminders/{{ reminder_id }}/delete" class="actions" onsubmit="return confirm('Delete this reminder?');">
+  <button class="btn btn-danger" type="submit">Delete this reminder</button>
+</form>
+{% endif %}
+{% endblock %}

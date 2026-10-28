@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}Change one date{% endblock %}
+{% block content %}
+<h1>Change one date</h1>
+<p class="hint">Only the {{ original_label }} occurrence of “{{ event.title }}” changes. Who it's for, the category and the reminder stay as set for the series.</p>
+{% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
+<form method="post" class="form" novalidate>
+  <div class="field {% if errors.title %}has-error{% endif %}">
+    <label for="title">What</label>
+    <input id="title" name="title" type="text" maxlength="120" required value="{{ form.title }}">
+    {% if errors.title %}<p class="err">{{ errors.title }}</p>{% endif %}
+  </div>
+  <div class="row">
+    <div class="field {% if errors.start_date %}has-error{% endif %}">
+      <label for="start_date">Starts</label>
+      <input id="start_date" name="start_date" type="date" required value="{{ form.start_date }}">
+      {% if errors.start_date %}<p class="err">{{ errors.start_date }}</p>{% endif %}
+    </div>
+    {% if not event.all_day %}
+    <div class="field {% if errors.start_time %}has-error{% endif %}">
+      <label for="start_time">at</label>
+      <input id="start_time" name="start_time" type="time" value="{{ form.start_time }}">
+      {% if errors.start_time %}<p class="err">{{ errors.start_time }}</p>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="row">
+    <div class="field {% if errors.end_date %}has-error{% endif %}">
+      <label for="end_date">Ends</label>
+      <input id="end_date" name="end_date" type="date" value="{{ form.end_date }}">
+      {% if errors.end_date %}<p class="err">{{ errors.end_date }}</p>{% endif %}
+    </div>
+    {% if not event.all_day %}
+    <div class="field {% if errors.end_time %}has-error{% endif %}">
+      <label for="end_time">at</label>
+      <input id="end_time" name="end_time" type="time" value="{{ form.end_time }}">
+      {% if errors.end_time %}<p class="err">{{ errors.end_time }}</p>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="field">
+    <label for="location">Where <span class="opt">(optional)</span></label>
+    <input id="location" name="location" type="text" maxlength="200" value="{{ form.location }}">
+    {% if errors.location %}<p class="err">{{ errors.location }}</p>{% endif %}
+  </div>
+  <div class="field">
+    <label for="notes">Notes <span class="opt">(optional)</span></label>
+    <textarea id="notes" name="notes" rows="3" maxlength="2000">{{ form.notes }}</textarea>
+    {% if errors.notes %}<p class="err">{{ errors.notes }}</p>{% endif %}
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save this date</button>
+    <a class="btn btn-quiet" href="/events/{{ event.id }}/occurrence/{{ occ_date }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

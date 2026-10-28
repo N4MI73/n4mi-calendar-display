@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}{{ occ.title }}{% endblock %}
+{% block content %}
+<h1>{{ occ.title }}</h1>
+<div class="card">
+  <p class="when">{{ event_date(occ) }} · {{ event_when(occ) }}</p>
+  {% if occ.location %}<p>{{ occ.location }}</p>{% endif %}
+  <p>{% for p in occ.people %}<span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>{% endfor %}
+     <span class="pill category"><span class="swatch" style="background: {{ occ.category_color }}" aria-hidden="true"></span>{{ occ.category_name }}</span></p>
+  <p class="hint">{{ describe(event.rrule, event_start_date(event), event.recurrence_end) }}.
+    {% if occ.skipped %}<strong>This date is skipped.</strong>{% elif occ.changed %}<strong>This date has been changed from the usual.</strong>{% endif %}</p>
+</div>
+
+<h2>Just this date</h2>
+<div class="actions">
+  <a class="btn btn-primary" href="/events/{{ event.id }}/occurrence/{{ occ.occ_date }}/edit">Change this date</a>
+  {% if not occ.skipped %}
+  <form method="post" action="/events/{{ event.id }}/occurrence/{{ occ.occ_date }}/skip">
+    <button class="btn btn-quiet" type="submit">Skip this date</button>
+  </form>
+  {% endif %}
+  {% if occ.skipped or occ.changed %}
+  <form method="post" action="/events/{{ event.id }}/occurrence/{{ occ.occ_date }}/restore">
+    <button class="btn btn-quiet" type="submit">Put back as normal</button>
+  </form>
+  {% endif %}
+</div>
+
+<h2>Every date</h2>
+<div class="actions">
+  <a class="btn btn-quiet" href="/events/{{ event.id }}/edit">Edit the whole series</a>
+  <a class="btn btn-danger" href="/events/{{ event.id }}/delete">Delete the whole series</a>
+</div>
+<p><a href="/">Back to events</a></p>
+{% endblock %}

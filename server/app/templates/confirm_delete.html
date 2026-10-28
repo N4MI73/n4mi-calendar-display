@@ -2,7 +2,8 @@
 {% set active = 'events' %}
 {% block title %}Delete event{% endblock %}
 {% block content %}
-<h1>Delete this event?</h1>
+<h1>{{ 'Delete the whole series?' if event.rrule else 'Delete this event?' }}</h1>
+{% if event.rrule %}<p class="notice">This removes <strong>every</strong> date of “{{ event.title }}” ({{ describe(event.rrule, event_start_date(event), event.recurrence_end)|lower }}). To remove just one date, open that date from the Events list and choose “Skip this date”.</p>{% endif %}
 <div class="card">
   <p class="title">{{ event.title }}</p>
   <p>{{ event_date(event) }} · {{ event_when(event) }}</p>

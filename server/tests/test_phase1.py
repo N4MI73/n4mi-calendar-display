@@ -23,6 +23,9 @@ from app import db, store, timeutil  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
+LATEST = db.available_migrations()[-1][0]
+
+
 class TempDB(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -57,7 +60,7 @@ class TempDB(unittest.TestCase):
 
 class TestMigrations(TempDB):
     def test_fresh_database_has_schema_and_seeds(self):
-        self.assertEqual(db.schema_version(self.conn), 1)
+        self.assertEqual(db.schema_version(self.conn), LATEST)
         names = [r["name"] for r in store.list_categories(self.conn)]
         self.assertEqual(
             names, ["Medical", "Family", "Home", "Social", "Travel", "Club / Ham radio", "Info", "Other"]
@@ -73,7 +76,7 @@ class TestMigrations(TempDB):
         self.assertEqual(db.migrate(self.db_path), [])
         after = self.conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
         self.assertEqual(before, after)
-        self.assertEqual(db.schema_version(self.conn), 1)
+        self.assertEqual(db.schema_version(self.conn), LATEST)
 
     def test_info_category_has_no_default_reminder(self):
         info = self.conn.execute("SELECT * FROM categories WHERE name = 'Info'").fetchone()
@@ -89,7 +92,7 @@ class TestMigrations(TempDB):
         try:
             applied = db.migrate(self.db_path)
             self.assertEqual(applied, [999])
-            backups = list(Path(self.db_path).parent.glob("calendar.db.pre-v1-*.bak"))
+            backups = list(Path(self.db_path).parent.glob(f"calendar.db.pre-v{LATEST}-*.bak"))
             self.assertEqual(len(backups), 1)
             check = sqlite3.connect(backups[0])
             self.assertEqual(check.execute("SELECT COUNT(*) FROM categories").fetchone()[0], 8)
@@ -320,7 +323,7 @@ class TestEditorPages(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertTrue(body["ok"])
-        self.assertEqual(body["schema"], 1)
+        self.assertEqual(body["schema"], LATEST)
 
     def test_status_reports_unreadable_database(self):
         os.remove(self.db_path)
