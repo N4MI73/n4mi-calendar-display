@@ -90,7 +90,9 @@ pulls a finished image (`pull_policy: always`).
 - Household reminders show from their appear time (default: the end of night
   mode) until someone taps "I did it". With carry-over off they disappear at
   the end of their day; with it on they stay until done, as a single item.
-  "Undo" restores the previous state.
+  "Undo" restores the previous state. A reminder can also be one-off ("Doesn't
+  repeat", stored as a one-date rule): it shows on its date and is finished
+  for good once someone taps "I did it".
 
 - A repeating event can be changed or deleted for **just one date**, **from a
   date on** (the series ends the day before and a new series starts on that

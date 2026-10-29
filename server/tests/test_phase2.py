@@ -324,7 +324,7 @@ class TestReminders(Base):
 
     def test_validation(self):
         with self.assertRaises(store.ValidationError) as cm:
-            self.rem(text="", repeat="none", appear_time="25:00")
+            self.rem(text="", repeat="sometimes", appear_time="25:00")
         self.assertEqual(set(cm.exception.errors), {"text", "repeat", "appear_time"})
         with self.assertRaises(store.ValidationError):
             self.rem(text="x" * 81)

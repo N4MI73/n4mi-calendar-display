@@ -18,7 +18,7 @@ os.environ["CAL_NO_AUTOAPP"] = "1"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import db, display, store, timeutil  # noqa: E402
+from app import db, display, recurrence, store, timeutil  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
@@ -453,6 +453,67 @@ class TestSplitSeries(Base):
                          ["2026-10-23T10:00", "2026-10-30T10:00"])
         self.assertTrue(store.end_series_from(self.conn, eid, "2026-10-02"))   # from the first date: all gone
         self.assertIsNone(store.get_event(self.conn, eid))
+
+
+class TestOneTimeReminders(Base):
+    """'Doesn't repeat' household reminders (D47)."""
+
+    def once(self, **kw):
+        base = dict(text="Call the plumber about the estimate", start_date="2026-11-05", repeat="none")
+        base.update(kw)
+        return store.save_reminder(self.conn, store.ReminderInput(**base))
+
+    def showing(self, when):
+        return [r["text"] for r in store.reminders_showing(self.conn, datetime.fromisoformat(when))]
+
+    def test_stored_as_a_single_date(self):
+        rid = self.once(until="2026-12-31")          # a leftover end date is ignored
+        rem = store.get_reminder(self.conn, rid)
+        self.assertEqual((rem["rrule"], rem["recurrence_end"]), (recurrence.ONCE, None))
+        r = store.list_reminders(self.conn, datetime(2026, 11, 1, 9, 0))[0]
+        self.assertEqual(r["description"], "Once, on Thu, Nov 5, 2026")
+        self.assertTrue(r["once"])
+        self.assertEqual(r["next_at"], datetime(2026, 11, 5, 6, 0))
+        self.assertEqual(store.reminder_to_input(rem).repeat, "none")
+
+    def test_shows_on_its_day_only_without_carry_over(self):
+        self.once(appear_time="08:00")
+        self.assertEqual(self.showing("2026-11-05T07:59"), [])
+        self.assertEqual(self.showing("2026-11-05T08:00"), ["Call the plumber about the estimate"])
+        self.assertEqual(self.showing("2026-11-06T09:00"), [])
+        self.assertEqual(self.showing("2026-11-12T09:00"), [])   # never comes back
+
+    def test_carry_over_waits_until_done_then_gone_for_good(self):
+        rid = self.once(carry_over=True)
+        self.assertEqual(self.showing("2026-11-09T09:00"), ["Call the plumber about the estimate"])
+        self.assertTrue(store.mark_reminder_done(self.conn, rid, datetime(2026, 11, 9, 9, 5)))
+        self.assertEqual(self.showing("2026-11-09T09:06"), [])
+        self.assertEqual(self.showing("2027-11-05T09:00"), [])
+        r = store.list_reminders(self.conn, datetime(2026, 11, 9, 9, 6))[0]
+        self.assertIsNone(r["next_at"])
+        # Undo puts it back.
+        self.assertTrue(store.undo_reminder_done(self.conn, rid))
+        self.assertEqual(self.showing("2026-11-09T09:07"), ["Call the plumber about the estimate"])
+
+    def test_on_the_display_and_ticked_from_it(self):
+        self.once(carry_over=True)
+        client = TestClient(create_app(self.db_path))
+        rems = client.get("/api/v1/display?now=2026-11-06T09:00").json()["reminders"]
+        self.assertEqual([(r["text"], r["due"]) for r in rems], [("Call the plumber about the estimate", "2026-11-05")])
+        self.assertTrue(client.post("/api/v1/reminders/1/done?now=2026-11-06T09:01").json()["ok"])
+        self.assertEqual(client.get("/api/v1/display?now=2026-11-06T09:02").json()["reminders"], [])
+
+    def test_editor_offers_doesnt_repeat_and_shows_done(self):
+        client = TestClient(create_app(self.db_path))
+        self.assertIn('<option value="none"', client.get("/reminders/new").text)
+        r = client.post("/reminders/new", data={"text": "Return the library books", "start_date": "2026-11-05",
+                                                "repeat": "none", "carry_over": "1"}, follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        store.mark_reminder_done(self.conn, 1, datetime(2026, 11, 5, 9, 0))
+        page = client.get("/reminders").text
+        self.assertIn("Once, on Thu, Nov 5, 2026", page)
+        self.assertIn('<span class="pill">Done</span>', page)
+        self.assertIn('<option value="none" selected', client.get("/reminders/1/edit").text)
 
 
 class TestEditorFlows(Base):

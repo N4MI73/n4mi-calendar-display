@@ -25,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db, display, recurrence, store, timeutil
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.1"
 BASE_DIR = Path(__file__).parent
 
 

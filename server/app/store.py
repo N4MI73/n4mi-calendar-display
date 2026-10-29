@@ -912,8 +912,8 @@ def save_reminder(conn: sqlite3.Connection, data: ReminderInput, reminder_id: in
     if appear and not TIME_RE.match(appear):
         errors["appear_time"] = "Enter a time such as 07:00, or leave it blank."
     if data.repeat == "none":
-        errors["repeat"] = "Choose how often this reminder comes round."
-        rule, until = None, None
+        # A one-time reminder (D47): shows on its date, gone for good once done.
+        rule, until = (recurrence.ONCE, None) if start_d else (None, None)
     else:
         rule, until = _validate_repeat(data.pattern(), start_d, errors)
     if errors:
@@ -970,7 +970,7 @@ def reminder_status(rem: dict, now: datetime, dark_end: str) -> dict:
     occurrence is today. Only one item ever shows per reminder, so occurrences
     never stack.
     """
-    status = dict(rem, showing=False, due_occ=None, next_at=None)
+    status = dict(rem, showing=False, due_occ=None, next_at=None, once=rem["rrule"] == recurrence.ONCE)
     status["description"] = recurrence.describe(
         rem["rrule"], timeutil.parse_date(rem["start_date"]), rem["recurrence_end"]
     )

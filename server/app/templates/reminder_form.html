@@ -14,7 +14,7 @@
 
   <div class="row">
     <div class="field {% if errors.start_date %}has-error{% endif %}">
-      <label for="start_date">First date</label>
+      <label for="start_date">Date <span class="opt">(the first date, if it repeats)</span></label>
       <input id="start_date" name="start_date" type="date" required value="{{ form.start_date }}">
       {% if errors.start_date %}<p class="err">{{ errors.start_date }}</p>{% endif %}
     </div>
@@ -26,7 +26,7 @@
   </div>
   <p class="hint">Leave “Shows from” blank to show it when night mode ends ({{ dark_end_label }}).</p>
 
-  {{ repeat_fields(form, errors, allow_none=False, start_label='first date') }}
+  {{ repeat_fields(form, errors, start_label='date') }}
 
   <fieldset class="field">
     <legend>If nobody does it that day</legend>

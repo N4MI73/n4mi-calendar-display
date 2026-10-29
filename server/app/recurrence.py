@@ -31,6 +31,9 @@ WEEKDAY_NAMES = {
 ORDINALS = ["1", "2", "3", "4", "5", "-1"]
 ORDINAL_NAMES = {"1": "1st", "2": "2nd", "3": "3rd", "4": "4th", "5": "5th", "-1": "last"}
 REPEAT_CHOICES = ["none", "weekly", "monthly_nth", "monthly_date", "yearly"]
+# A household reminder that doesn't repeat (D47) is stored as a rule with one date,
+# so it uses the same expansion as the others. Events that don't repeat store no rule.
+ONCE = "FREQ=DAILY;COUNT=1"
 
 
 @dataclass
@@ -104,7 +107,7 @@ def _parts(rule: str) -> dict[str, str]:
 
 def pattern_from_rrule(rule: str | None, until: str | None, start: date) -> Pattern:
     """Read stored RRULE text back into form values (or 'custom' if it isn't one of the four)."""
-    if not rule:
+    if not rule or rule == ONCE:
         return Pattern(repeat="none", weekdays=[WEEKDAYS[start.weekday()]],
                        ordinals=[_nth_of_month(start)], nth_weekday=WEEKDAYS[start.weekday()])
     p = _parts(rule)
@@ -145,6 +148,8 @@ def describe(rule: str | None, start: date, until: str | None = None) -> str:
     """Plain-English summary, for example 'Every month on the 2nd, 3rd, 4th and 5th Friday'."""
     if not rule:
         return "Doesn't repeat"
+    if rule == ONCE:
+        return f"Once, on {start.strftime('%a, %b')} {start.day}, {start.year}"
     p = pattern_from_rrule(rule, until, start)
     if p.repeat == "weekly":
         names = [WEEKDAY_NAMES[d] for d in WEEKDAYS if d in p.weekdays]
@@ -168,7 +173,7 @@ def describe(rule: str | None, start: date, until: str | None = None) -> str:
 
 def _rule(rule: str, dtstart: datetime, until: str | None):
     r = rrulestr(rule, dtstart=dtstart, ignoretz=True)
-    if until:
+    if until and "COUNT=" not in rule.upper():   # a rule can't have both
         end = datetime.strptime(until, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
         r = r.replace(until=end)
     return r

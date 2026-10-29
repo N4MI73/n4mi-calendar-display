@@ -6,7 +6,7 @@
   <h1>Reminders</h1>
   <a class="btn btn-primary" href="/reminders/new">+ Add reminder</a>
 </div>
-<p class="hint">Household jobs that come round regularly. Each one shows on the display until someone taps “I did it”.</p>
+<p class="hint">Household jobs, regular or one-off. Each one shows on the display until someone taps “I did it”. A one-off reminder is finished once it's done; delete it here when you no longer need it.</p>
 
 {% if undo_id %}
 <form method="post" action="/reminders/{{ undo_id }}/undo" class="undo">
@@ -25,9 +25,10 @@
       <span class="status">
         {% if not r.active %}<span class="pill">Paused</span>
         {% elif r.showing %}<span class="pill showing">Showing now</span>
+        {% elif r.once and r.last_done_at %}<span class="pill">Done</span> {{ fmt_when(r.last_done_at) }}
         {% elif r.next_at %}Next: {{ fmt_when(r.next_at) }}
         {% else %}No more dates{% endif %}
-        {% if r.last_done_at %} · Last done {{ fmt_when(r.last_done_at) }}{% endif %}
+        {% if r.last_done_at and not (r.once and not r.showing) %} · Last done {{ fmt_when(r.last_done_at) }}{% endif %}
       </span>
     </a>
     {% if r.showing %}
