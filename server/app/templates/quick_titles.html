@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}Quick titles{% endblock %}
+{% block content %}
+<h1>Quick titles</h1>
+<p class="hint">These are offered as one-tap buttons on the shelf display's <strong>Add</strong> form, so most events can be added without typing. A title can also pick its category (for example Dentist → Medical). The display shows the first {{ shown_max }}, in alphabetical order.</p>
+
+<ul class="list">
+{% for q in titles %}
+  <li class="list-row">
+    <span class="title">{{ q.title }}{% if loop.index > shown_max %} <span class="meta">(not shown: over {{ shown_max }})</span>{% endif %}</span>
+    {% if q.category_name %}<span class="pill category"><span class="swatch" style="background: {{ q.category_color }}" aria-hidden="true"></span>{{ q.category_name }}</span>{% else %}<span class="meta">No category</span>{% endif %}
+    <a class="btn btn-quiet btn-small" href="/quick-titles/{{ q.id }}/edit">Edit</a>
+    <form method="post" action="/quick-titles/{{ q.id }}/delete" class="inline">
+      <button class="btn btn-quiet btn-small" type="submit">Remove</button>
+    </form>
+  </li>
+{% else %}
+  <li class="empty">No quick titles yet. Add one below, or let the calendar suggest some from your events.</li>
+{% endfor %}
+</ul>
+
+<h2>Add a title</h2>
+<form method="post" action="/quick-titles" class="form compact" novalidate>
+  <div class="row">
+    <div class="field grow {% if errors.title %}has-error{% endif %}">
+      <label for="title">Title</label>
+      <input id="title" name="title" type="text" maxlength="120" value="{{ new.title }}" required>
+      {% if errors.title %}<p class="err">{{ errors.title }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.category %}has-error{% endif %}">
+      <label for="category_id">Category (optional)</label>
+      <select id="category_id" name="category_id">
+        <option value="">None: choose when adding</option>
+        {% for k in categories %}<option value="{{ k.id }}" {% if new.category_id|string == k.id|string %}selected{% endif %}>{{ k.name }}</option>{% endfor %}
+      </select>
+      {% if errors.category %}<p class="err">{{ errors.category }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Add title</button></div>
+</form>
+
+<h2>Suggestions from your events</h2>
+{% if suggestions is none %}
+<p class="hint">Titles you've used on two or more events, with the category you usually give them.</p>
+<p><a class="btn" href="/quick-titles?suggest=1">Suggest from my events</a></p>
+{% elif not suggestions %}
+<p class="empty">No suggestions: every title used more than once is already on the list.</p>
+{% else %}
+<form method="post" action="/quick-titles/add-suggested" class="form compact">
+  <p class="hint">Tick the ones to add.</p>
+  <div class="choices">
+  {% for s in suggestions %}
+    {% set cat = (categories | selectattr('id', 'equalto', s.category_id) | list | first) %}
+    <label class="choice"><input type="checkbox" name="pick" value="{{ s.title }}|{{ s.category_id or '' }}"> {{ s.title }}{% if cat %} · {{ cat.name }}{% endif %} <span class="meta">({{ s.uses }} events)</span></label>
+  {% endfor %}
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Add ticked titles</button> <a class="btn btn-quiet" href="/quick-titles">Cancel</a></div>
+</form>
+{% endif %}
+{% endblock %}

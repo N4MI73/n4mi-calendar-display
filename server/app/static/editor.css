@@ -205,3 +205,14 @@ h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
 .lead { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .lead input.minutes { margin: 0; }
 select.unit { width: auto; min-height: 44px; }
+
+/* Phase 4: events added from the shelf display (D52). */
+.shelf-tag {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #8E95A2;
+  color: #D7DBE2;
+}

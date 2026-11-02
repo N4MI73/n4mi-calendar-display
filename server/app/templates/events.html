@@ -13,6 +13,7 @@
 
 <p class="subnav">
   {% if show == 'past' %}<a href="/">Show upcoming events</a>{% else %}<a href="/?show=past">Show the last 60 days</a>{% endif %}
+  · <a href="/recently-deleted">Recently deleted</a>
 </p>
 
 {% if not day_groups %}
@@ -30,6 +31,7 @@
         <span class="when">{{ event_when(e) }}{% if e.recurring %} · <span class="repeats">{{ 'Changed this time' if e.changed else 'Repeats' }}</span>{% endif %}</span>
         <span class="title">{{ e.title }}</span>
         {% if e.location %}<span class="location">{{ e.location }}</span>{% endif %}
+        {% if e.added_on_shelf %}<span class="shelf-tag">Added on the shelf</span>{% endif %}
         <span class="tags">
           {% for p in e.people %}<span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>{% endfor %}
           <span class="pill category"><span class="swatch" style="background: {{ e.category_color }}" aria-hidden="true"></span>{{ e.category_name }}</span>

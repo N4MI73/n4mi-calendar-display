@@ -1,7 +1,8 @@
-/* N4MI Calendar Display — the shelf screen (Phase 3).
+/* N4MI Calendar Display — the shelf screen (Phases 3 and 4).
    Designed for the Elecrow at 1280×800. Sizes are in rem, and 1rem is set from
    the screen size (16px at 1280×800), so the layout scales with the screen.
-   Approved mockup: Calendar Display Mockup, "Phase 3 · 1280 × 800" (D42). */
+   Approved mockups: Calendar Display Mockup, "Phase 3 · 1280 × 800" (D42) and
+   "Phase 4 · actions" (D48). */
 
 @font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-style: normal; font-display: block;
   src: url("/static/fonts/AtkinsonHyperlegible-Regular.woff2") format("woff2"); }
@@ -99,6 +100,19 @@ html.kiosk, html.kiosk * { cursor: none !important; }
 .panel h2 { margin: 0 0 0.5rem; font-size: 1.75rem; font-weight: 700; color: var(--text-2); line-height: 3.375rem; flex: 0 0 auto; }
 .coming { padding: 1.125rem 1.5rem; }
 .today-list, .coming-list { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* Coming up scrolls (D48); a thin bar shows there is more. */
+.coming-list { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #4A5466 transparent;
+  -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.coming-list::-webkit-scrollbar { width: 6px; }
+.coming-list::-webkit-scrollbar-thumb { background: #4A5466; border-radius: 3px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex: 0 0 auto; margin-bottom: 0.5rem; }
+.panel-head h2 { margin: 0; }
+.head-btn { display: inline-flex; align-items: center; gap: 0.625rem; height: 3.375rem; padding: 0 1.5rem; border: 0;
+  border-radius: 0.75rem; background: var(--button-2); color: var(--text); font: inherit; font-size: 1.375rem; font-weight: 700; }
+.head-btn svg { width: 1.375rem; height: 1.375rem; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.head-btn:disabled { opacity: 0.4; }
+.tap { cursor: pointer; }
+.tap:active { background: #1E2430; }
 
 /* Today rows */
 .row { display: grid; grid-template-columns: 9.375rem minmax(0, 1fr); column-gap: 1.125rem; align-items: start;
@@ -157,5 +171,94 @@ html.kiosk, html.kiosk * { cursor: none !important; }
 .message p { margin: 0; font-size: 2.5rem; font-weight: 700; color: var(--text-2); max-width: 50rem; line-height: 1.3; }
 .message p small { display: block; margin-top: 1rem; font-size: 1.625rem; font-weight: 400; color: var(--text-3); }
 
+/* Notes pill (D50): text, never colour alone. */
+.pill.notes { background: transparent; border: 2px solid var(--text-4); color: var(--button); gap: 0.375rem; }
+.pill.notes svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.item .pill.notes { padding: 0.0625rem 0.625rem; }
+
+/* Phase 4 panels: details, delete, move, add ------------------------------- */
+.overlay { position: fixed; inset: 0; z-index: 5; background: rgba(6, 8, 12, 0.74); display: flex; align-items: center;
+  justify-content: center; padding: 1.5rem; }
+.sheet { width: 66.25rem; max-width: 100%; max-height: 100%; background: #1B2029; border: 2px solid #343C4A; border-radius: 1.375rem;
+  padding: 2.25rem; color: var(--text); display: flex; flex-direction: column; gap: 1.25rem; }
+.sheet.wide { width: 77rem; height: 47rem; padding: 1.75rem; gap: 1.125rem; }
+.sheet.narrow { width: 57.5rem; }
+.sheet h3 { margin: 0; font-size: 2.875rem; font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.sheet .when { font-size: 1.875rem; font-weight: 700; color: #E3E6EB; }
+.sheet .rep { font-size: 1.5rem; color: var(--text-2); }
+.sheet .loc { display: flex; align-items: center; gap: 0.75rem; font-size: 1.625rem; color: var(--chip-text); }
+.sheet .loc svg { width: 1.625rem; height: 1.625rem; fill: none; stroke: var(--text-3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.sheet .tags { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+.sheet .tags .pill { font-size: 1.375rem; padding: 0.25rem 1rem; }
+.sheet .tags .pill.category .sq { width: 0.875rem; height: 0.875rem; }
+.sheet .notes { border-top: 2px solid #2C3340; padding-top: 1.125rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.sheet .notes .txt { font-size: 1.625rem; line-height: 1.35; white-space: pre-line; overflow-wrap: anywhere; max-height: 12rem; overflow: auto; }
+.sheet .lbl { font-size: 1.375rem; font-weight: 700; color: var(--text-3); }
+.sheet .say { font-size: 1.625rem; line-height: 1.4; color: var(--chip-text); }
+.sheet .say.small { font-size: 1.375rem; color: var(--text-3); }
+.sheet .bar { display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem; }
+.sheet .bar .fill { flex: 1; }
+.sheet .bar .aside { margin-left: auto; font-size: 1.125rem; color: var(--text-4); }
+.sheet .warn { display: flex; align-items: center; gap: 0.875rem; padding: 1rem 1.25rem; border-radius: 0.875rem; background: #3A2E12;
+  color: #FFE3A3; font-size: 1.5rem; font-weight: 700; }
+.sheet .warn svg { flex: 0 0 auto; width: 1.875rem; height: 1.875rem; fill: none; stroke: #FFD166; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.sheet .err { font-size: 1.5rem; font-weight: 700; color: #FFB4B4; }
+.sheet .shead { display: flex; align-items: baseline; gap: 1.25rem; }
+.sheet .shead .t { font-size: 2.375rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sheet .shead .s { font-size: 1.375rem; color: var(--text-3); white-space: nowrap; }
+.sheet .grp { display: flex; flex-direction: column; gap: 0.625rem; }
+.sheet .rowb { display: flex; gap: 0.625rem; align-items: center; flex-wrap: wrap; }
+.sheet .cols { display: flex; gap: 1.5rem; align-items: flex-start; }
+.sheet .summary { font-size: 1.75rem; font-weight: 700; }
+
+.b { height: 4rem; padding: 0 1.875rem; border-radius: 0.875rem; border: 0; font: inherit; font-size: 1.625rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.625rem; flex: 0 0 auto; background: var(--button-2); color: var(--text); }
+.b svg { width: 1.625rem; height: 1.625rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.b.primary { background: var(--button); color: var(--bg); }
+.b.danger { background: #B4232A; color: #FFFFFF; }
+.b.dangerText { color: #FFB4B4; }
+.b:disabled { opacity: 0.4; }
+.b:active:not(:disabled) { transform: scale(0.97); }
+.b.w { width: 13.75rem; padding: 0; }
+.c { height: 3.625rem; border-radius: 0.875rem; border: 2px solid #3A4352; background: #1F2530; color: #E3E6EB; font: inherit;
+  font-size: 1.5rem; font-weight: 700; padding: 0 1.25rem; flex: 0 0 auto; display: inline-flex; align-items: center;
+  justify-content: center; gap: 0.5rem; }
+.c.on { background: var(--button); color: var(--bg); border-color: var(--button); }
+.c.dayb { width: 8.25rem; height: 4.125rem; flex-direction: column; gap: 0; line-height: 1.05; padding: 0; }
+.c.dayb small { font-size: 1.125rem; font-weight: 400; }
+.c.hour { width: 7.5rem; padding: 0; }
+.c.small { height: 3rem; font-size: 1.25rem; padding: 0 1rem; }
+.sheet .cols .rowb { flex-wrap: nowrap; }
+.sheet .grp > .rowb > .lbl { align-self: center; }
+.c.min { width: 6.875rem; padding: 0; }
+.c.chip { height: 3.375rem; }
+.c.cat { height: 3.25rem; border-radius: 999px; font-size: 1.3125rem; padding: 0 1rem; }
+.c.cat .sq { width: 0.875rem; height: 0.875rem; border-radius: 3px; }
+.c.person { width: 10rem; height: 3.75rem; border-radius: 999px; border-width: 3px; font-size: 1.625rem; }
+.c.person svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.c:active { transform: scale(0.97); }
+.month { display: grid; grid-template-columns: repeat(7, 8.25rem); gap: 0.5rem; }
+.month .dow { font-size: 1.125rem; color: var(--text-3); text-align: center; }
+.month .c { width: 8.25rem; height: 3.5rem; padding: 0; }
+.month .c:disabled { opacity: 0.25; }
+
+/* The page's own keyboard (D48): large keys, works whatever the OS does. */
+.titlebox { flex: 1; height: 4.25rem; padding: 0 1.375rem; border-radius: 0.875rem; border: 3px solid var(--accent); background: var(--bg);
+  color: var(--text); font: inherit; font-size: 2rem; font-weight: 700; caret-color: var(--accent); min-width: 0; }
+.kb { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; background: #151920; border-radius: 1rem; padding: 0.875rem; }
+.kb .rowb { flex-wrap: nowrap; gap: 0.5rem; }
+.kb .c { width: 6.5rem; height: 3.625rem; padding: 0; font-size: 1.625rem; }
+.kb .c.shift.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.kb .c.space { width: 37.5rem; font-size: 1.5rem; }
+.kb .c.wide { width: 11.25rem; font-size: 1.5rem; }
+.kb .c.del { width: 15rem; font-size: 1.5rem; }
+.kb .c svg { width: 1.875rem; height: 1.875rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A short confirmation after an action ("Added Dentist on Tue, Nov 17"). */
+.toast { position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 6; background: var(--button); color: var(--bg);
+  font-size: 1.625rem; font-weight: 700; padding: 1rem 1.75rem; border-radius: 0.875rem; max-width: 70rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5); }
+
 /* Night (dark hours): fully black. A tap wakes the screen and never presses anything. */
 .night { position: fixed; inset: 0; background: #000; z-index: 10; cursor: none; }
+.head-btn.dim { opacity: 0.4; }

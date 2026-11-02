@@ -25,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db, display, recurrence, store, timeutil
 
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.4.0"
 BASE_DIR = Path(__file__).parent
 
 
@@ -105,6 +105,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         event_start_date=_event_start_date,
         describe=recurrence.describe,
         fmt_when=_fmt_when,
+        fmt_deleted=lambda t: _fmt_when(t[:16]),
     )
 
     def conn() -> sqlite3.Connection:
@@ -198,6 +199,70 @@ def create_app(db_path: str | None = None) -> FastAPI:
             return _api_error(409, "not_showing" if action == "done" else "nothing_to_undo")
         return {"ok": True, "id": reminder_id, "action": action}
 
+    # ------------------------------------------------ shelf actions (Phase 4)
+
+    async def _body(request: Request) -> dict | None:
+        try:
+            data = await request.json()
+        except Exception:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _shelf_call(version: int, fn):
+        """Run one shelf action with the API's error handling (D48)."""
+        if version != display.API_VERSION:
+            return _unsupported(version)
+        c = conn()
+        try:
+            try:
+                return fn(c)
+            except store.ValidationError as exc:
+                return _api_error(400, "invalid", fields=exc.errors)
+            except store.NotFoundError as exc:
+                return _api_error(404, "not_found", message=str(exc))
+        finally:
+            c.close()
+
+    @app.post("/api/v{version:int}/events")
+    async def api_add_event(version: int, request: Request):
+        """Quick add from the shelf: title, date, time or all day, people, category."""
+        body = await _body(request)
+        if body is None:
+            return _api_error(400, "bad_json")
+
+        def go(c):
+            event_id = store.add_from_shelf(
+                c, str(body.get("title", "")), str(body.get("date", "")), str(body.get("time", "")),
+                bool(body.get("all_day")), body.get("people") or [], body.get("category_id"),
+            )
+            return {"ok": True, "id": event_id}
+        return _shelf_call(version, go)
+
+    @app.post("/api/v{version:int}/events/{event_id}/move")
+    async def api_move_event(version: int, event_id: int, request: Request):
+        """Move one event, or one date of a repeating event (`occ`), keeping its length."""
+        body = await _body(request)
+        if body is None:
+            return _api_error(400, "bad_json")
+
+        def go(c):
+            moved = store.move_from_shelf(c, event_id, body.get("occ"), str(body.get("date", "")),
+                                          str(body.get("time", "")))
+            return {"ok": True, "id": event_id, **moved}
+        return _shelf_call(version, go)
+
+    @app.post("/api/v{version:int}/events/{event_id}/delete")
+    async def api_delete_event(version: int, event_id: int, request: Request):
+        """Delete a one-off event, or one date of a repeating event (`occ`). Restorable for 3 days (D51)."""
+        body = await _body(request)
+        if body is None:
+            return _api_error(400, "bad_json")
+
+        def go(c):
+            what = store.delete_from_shelf(c, event_id, body.get("occ"))
+            return {"ok": True, "id": event_id, "deleted": what}
+        return _shelf_call(version, go)
+
     # ------------------------------------------------------------ web app
 
     @app.get("/manifest.webmanifest")
@@ -243,7 +308,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return rows
 
     def _event_form_page(request, c, form: store.EventInput, event_id=None, errors=None, status=200,
-                         future=None, dropped=None):
+                         future=None, dropped=None, shelf_added=False):
         """future: an occurrence date when changing "this and all later dates" (D46)."""
         return render(
             request,
@@ -259,6 +324,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             future_label=_date_label(future) if future else "",
             dropped=[_date_label(x["occ_date"]) + (" (skipped)" if x["skipped"] else " (changed)")
                      for x in (dropped or [])],
+            shelf_added=shelf_added,
         )
 
     def _form_to_input(form) -> store.EventInput:
@@ -332,7 +398,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
             event = store.get_event(c, event_id)
             if not event:
                 return redirect("/", "That event no longer exists.")
-            return _event_form_page(request, c, store.event_to_input(event), event_id=event_id)
+            return _event_form_page(request, c, store.event_to_input(event), event_id=event_id,
+                                    shelf_added=bool(event.get("added_on_shelf")))
         finally:
             c.close()
 
@@ -797,6 +864,123 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         return redirect("/categories", f"Removed {cat['name']}.")
+
+    # ------------------------------------------------- Quick titles (D49)
+
+    def _quick_titles_page(request, c, new=None, errors=None, status=200, show_suggestions=False):
+        return render(
+            request, "quick_titles.html", status_code=status,
+            titles=store.list_quick_titles(c), categories=store.list_categories(c),
+            new=new or {"title": "", "category_id": ""}, errors=errors or {},
+            suggestions=store.suggest_quick_titles(c) if show_suggestions else None,
+            shown_max=store.MAX_QUICK_TITLES_SHOWN,
+        )
+
+    @app.get("/quick-titles", response_class=HTMLResponse)
+    def quick_titles_page(request: Request, suggest: int = 0):
+        c = conn()
+        try:
+            return _quick_titles_page(request, c, show_suggestions=bool(suggest))
+        finally:
+            c.close()
+
+    @app.post("/quick-titles", response_class=HTMLResponse)
+    async def quick_title_create(request: Request):
+        f = await request.form()
+        new = {"title": f.get("title", ""), "category_id": f.get("category_id", "")}
+        c = conn()
+        try:
+            try:
+                store.save_quick_title(c, new["title"], new["category_id"])
+            except store.ValidationError as exc:
+                return _quick_titles_page(request, c, new, exc.errors, status=400)
+        finally:
+            c.close()
+        return redirect("/quick-titles", f"Added “{new['title'].strip()}”.")
+
+    @app.post("/quick-titles/add-suggested")
+    async def quick_titles_add_suggested(request: Request):
+        f = await request.form()
+        picked = f.getlist("pick")
+        added = 0
+        c = conn()
+        try:
+            for raw in picked:
+                title, _, cat = raw.partition("|")
+                try:
+                    store.save_quick_title(c, title, cat or None)
+                    added += 1
+                except store.ValidationError:
+                    pass
+        finally:
+            c.close()
+        return redirect("/quick-titles", f"Added {added} title{'s' if added != 1 else ''}." if added
+                        else "Nothing was ticked.")
+
+    @app.get("/quick-titles/{qt_id}/edit", response_class=HTMLResponse)
+    def quick_title_edit(request: Request, qt_id: int):
+        c = conn()
+        try:
+            qt = store.get_quick_title(c, qt_id)
+            if not qt:
+                return redirect("/quick-titles", "That title is no longer on the list.")
+            form = {"id": qt_id, "title": qt["title"], "category_id": str(qt["category_id"] or "")}
+            return render(request, "quick_title_form.html", form=form, errors={},
+                          categories=store.list_categories(c))
+        finally:
+            c.close()
+
+    @app.post("/quick-titles/{qt_id}/edit", response_class=HTMLResponse)
+    async def quick_title_update(request: Request, qt_id: int):
+        f = await request.form()
+        form = {"id": qt_id, "title": f.get("title", ""), "category_id": f.get("category_id", "")}
+        c = conn()
+        try:
+            if not store.get_quick_title(c, qt_id):
+                return redirect("/quick-titles", "That title is no longer on the list.")
+            try:
+                store.save_quick_title(c, form["title"], form["category_id"], qt_id)
+            except store.ValidationError as exc:
+                return render(request, "quick_title_form.html", status_code=400, form=form, errors=exc.errors,
+                              categories=store.list_categories(c))
+        finally:
+            c.close()
+        return redirect("/quick-titles", f"Saved “{form['title'].strip()}”.")
+
+    @app.post("/quick-titles/{qt_id}/delete")
+    def quick_title_delete(qt_id: int):
+        c = conn()
+        try:
+            qt = store.get_quick_title(c, qt_id)
+            if qt:
+                store.delete_quick_title(c, qt_id)
+        finally:
+            c.close()
+        return redirect("/quick-titles", f"Removed “{qt['title']}”." if qt else "That title is no longer on the list.")
+
+    # ------------------------------------------------ Recently deleted (D51)
+
+    @app.get("/recently-deleted", response_class=HTMLResponse)
+    def recently_deleted_page(request: Request):
+        c = conn()
+        try:
+            items = store.list_recently_deleted(c)
+        finally:
+            c.close()
+        return render(request, "recently_deleted.html", items=items, keep_days=store.DELETED_KEEP_DAYS,
+                      keep_max=store.DELETED_KEEP_MAX)
+
+    @app.post("/recently-deleted/{entry_id}/restore")
+    def recently_deleted_restore(entry_id: int):
+        c = conn()
+        try:
+            try:
+                message = store.restore_deleted(c, entry_id)
+            except store.NotFoundError as exc:
+                message = str(exc)
+        finally:
+            c.close()
+        return redirect("/recently-deleted", message)
 
     # ------------------------------------------------------------ settings
 

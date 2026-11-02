@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% set active = 'events' %}
+{% block title %}Recently deleted{% endblock %}
+{% block content %}
+<h1>Recently deleted</h1>
+<p class="hint">Deleted events, and dates deleted from the shelf display, stay here for {{ keep_days }} days (at most the {{ keep_max }} most recent) so they can be put back. After that they're gone for good.</p>
+
+<ul class="list">
+{% for d in items %}
+  <li class="list-row">
+    <span class="title">{{ d.title }}</span>
+    <span class="meta">{% if d.kind == 'date' %}Only {{ d.when_label }}{% else %}{{ d.when_label }}{% endif %} · deleted {{ fmt_deleted(d.deleted_at) }}{% if d.from_shelf %} on the shelf{% endif %}</span>
+    <form method="post" action="/recently-deleted/{{ d.id }}/restore" class="inline">
+      <button class="btn btn-small" type="submit">Restore</button>
+    </form>
+  </li>
+{% else %}
+  <li class="empty">Nothing deleted in the last {{ keep_days }} days.</li>
+{% endfor %}
+</ul>
+<p class="subnav"><a href="/">Back to events</a></p>
+{% endblock %}

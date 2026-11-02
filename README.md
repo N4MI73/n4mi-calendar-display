@@ -27,8 +27,11 @@ import (a later phase).
   with "I did it" from the display, an offline copy and night mode; reminder
   times in minutes, hours or days, reminders for all-day events, and changing
   a repeating event from a date on.
-- **Next:** on-screen quick add, delete and reschedule, then Google import and
-  review, then hardening the Pi as an unattended appliance.
+- **Phase 4:** add, move and delete from the shelf display (with quick
+  titles and its own on-screen keyboard), event details with notes, a
+  scrolling Coming up, and a Recently deleted list in the editor.
+- **Next:** Google import and review, then hardening the Pi as an unattended
+  appliance.
 
 ## Privacy
 

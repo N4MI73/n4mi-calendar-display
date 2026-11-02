@@ -21,7 +21,7 @@ import math
 import sqlite3
 from datetime import date, datetime, time, timedelta
 
-from . import store, timeutil
+from . import recurrence, store, timeutil
 
 API_VERSION = 1
 CACHE_EXTRA_DAYS = 7
@@ -81,6 +81,11 @@ def _event_json(e: dict, dark_start: time, dark_end: time) -> dict:
         "info": info,
         "remind_at": _fmt_local(at) if at else None,
         "repeats": bool(e.get("recurring")),
+        # Phase 4 (D48, D50): the details panel.
+        "notes": e["notes"] or "",
+        "repeat_text": recurrence.describe(e["rrule"], timeutil.parse_local(e["start_local"]).date(),
+                                           e["recurrence_end"]) if e.get("recurring") else "",
+        "changed": bool(e.get("changed")),
     }
 
 
@@ -146,4 +151,9 @@ def build(conn: sqlite3.Connection, now: datetime) -> dict:
         },
         "days": [days[k] for k in sorted(days)],
         "reminders": reminders,
+        # Phase 4: choices for the Add form (D48, D49).
+        "people": [{"id": p["id"], "name": p["name"], "color": p["color"]} for p in store.list_people(conn)],
+        "categories": [{"id": c["id"], "name": c["name"], "color": c["color"]} for c in store.list_categories(conn)],
+        "quick_titles": [{"title": q["title"], "category_id": q["category_id"]}
+                         for q in store.list_quick_titles(conn)[:store.MAX_QUICK_TITLES_SHOWN]],
     }

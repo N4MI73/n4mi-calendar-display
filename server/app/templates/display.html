@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/static/display.css?v={{ app_version }}">
 </head>
 <body>
-<!-- N4MI Calendar Display: the shelf screen (Phase 3). Everything here is served
+<!-- N4MI Calendar Display: the shelf screen (Phases 3 and 4). Everything here is served
      by the calendar server; nothing is loaded from the internet. The page reads
      /api/v1/display, keeps the last good copy in the browser, and shows it with
      a "Not updated since" bar when the server can't be reached. -->
@@ -31,11 +31,17 @@
 
   <main class="panels">
     <section class="panel today" aria-labelledby="today-h">
-      <h2 id="today-h">Today</h2>
+      <div class="panel-head">
+        <h2 id="today-h">Today</h2>
+        <button type="button" id="add-btn" class="head-btn"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Add</button>
+      </div>
       <div id="today" class="today-list"></div>
     </section>
     <section class="panel coming" aria-labelledby="coming-h">
-      <h2 id="coming-h">Coming up</h2>
+      <div class="panel-head">
+        <h2 id="coming-h">Coming up</h2>
+        <button type="button" id="top-btn" class="head-btn" hidden>Back to top</button>
+      </div>
       <div id="coming" class="coming-list"></div>
       <div id="coming-more" class="more"></div>
     </section>
@@ -51,6 +57,10 @@
 <div id="message" class="message" role="status">
   <p id="message-text">Loading the calendar…</p>
 </div>
+
+<!-- Phase 4: details, delete, move and add open in this panel over the screen. -->
+<div id="sheet" class="overlay" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
 
 <div id="night" class="night" hidden></div>
 

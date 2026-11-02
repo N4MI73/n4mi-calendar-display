@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}Edit quick title{% endblock %}
+{% block content %}
+<h1>Edit quick title</h1>
+<form method="post" class="form compact" novalidate>
+  <div class="row">
+    <div class="field grow {% if errors.title %}has-error{% endif %}">
+      <label for="title">Title</label>
+      <input id="title" name="title" type="text" maxlength="120" value="{{ form.title }}" required autofocus>
+      {% if errors.title %}<p class="err">{{ errors.title }}</p>{% endif %}
+    </div>
+    <div class="field {% if errors.category %}has-error{% endif %}">
+      <label for="category_id">Category (optional)</label>
+      <select id="category_id" name="category_id">
+        <option value="">None: choose when adding</option>
+        {% for k in categories %}<option value="{{ k.id }}" {% if form.category_id|string == k.id|string %}selected{% endif %}>{{ k.name }}</option>{% endfor %}
+      </select>
+      {% if errors.category %}<p class="err">{{ errors.category }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-quiet" href="/quick-titles">Cancel</a>
+  </div>
+</form>
+{% endblock %}

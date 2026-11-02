@@ -142,7 +142,7 @@ class TestMigration0003(unittest.TestCase):
                          " VALUES ('Birthday', '2026-11-05', '2026-11-05', 2, 'x', 'x')")
             conn.commit()
             conn.close()
-            self.assertEqual(db.migrate(path), [3])
+            self.assertEqual(db.migrate(path)[0], 3)   # later migrations follow it
             self.assertEqual(len(list(Path(tmp).glob("calendar.db.pre-v2-*.bak"))), 1)
             c = db.connect(path)
             self.assertEqual(c.execute("SELECT title FROM events").fetchone()[0], "Birthday")

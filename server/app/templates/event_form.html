@@ -9,6 +9,7 @@
 <p class="hint">Changes start on {{ future_label }}. Earlier dates stay as they were.</p>
 {% else %}
 <h1>{{ ('Edit the whole series' if form.repeat != 'none' else 'Edit event') if event_id else 'Add event' }}</h1>
+{% if shelf_added %}<p class="hint"><span class="shelf-tag">Added on the shelf</span> Added from the shelf display, so it may need a location or notes.</p>{% endif %}
 {% if event_id and form.repeat != 'none' %}<p class="hint">Changes here apply to every date, past ones included. To change just one date, or a date and everything after it, open that date from the Events list.</p>{% endif %}
 {% endif %}
 

@@ -6,6 +6,7 @@ the same rules. Functions take an open connection and return plain dicts.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -483,9 +484,19 @@ def save_event(conn: sqlite3.Connection, data: EventInput, event_id: int | None 
     return event_id
 
 
-def delete_event(conn: sqlite3.Connection, event_id: int) -> None:
-    conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
-    conn.commit()
+def delete_event(conn: sqlite3.Connection, event_id: int, from_shelf: bool = False,
+                 now: datetime | None = None) -> None:
+    """Delete an event (every date, if it repeats). It stays restorable for a while (D51)."""
+    event = get_event(conn, event_id)
+    if event is None:
+        return
+    try:
+        _remember_deleted_event(conn, event, from_shelf, now)
+        conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 # ------------------------------------------- "this and all future" (D46)
@@ -1079,3 +1090,305 @@ def save_config(conn: sqlite3.Connection, form: dict[str, str]) -> dict[str, str
     )
     conn.commit()
     return clean
+
+
+# ------------------------------------------------ Recently deleted (D51)
+
+DELETED_KEEP_DAYS = 3
+DELETED_KEEP_MAX = 20
+
+
+class NotFoundError(Exception):
+    """The event or date asked for no longer exists (deleted or changed elsewhere)."""
+
+
+def _when_label(start_local: str, all_day: bool) -> str:
+    start = timeutil.parse_local(start_local)
+    day = f"{start.strftime('%a, %b')} {start.day}"
+    return f"All day {day}" if all_day else f"{day} at {timeutil.fmt_time(start)}"
+
+
+def _deleted_stamp(now: datetime | None) -> str:
+    return (now or timeutil.now_local()).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def purge_deleted(conn: sqlite3.Connection, now: datetime | None = None) -> None:
+    """Forget entries older than DELETED_KEEP_DAYS, and all but the newest DELETED_KEEP_MAX. Caller commits."""
+    cutoff = ((now or timeutil.now_local()) - timedelta(days=DELETED_KEEP_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
+    conn.execute("DELETE FROM recently_deleted WHERE deleted_at < ?", (cutoff,))
+    conn.execute(
+        "DELETE FROM recently_deleted WHERE id NOT IN"
+        " (SELECT id FROM recently_deleted ORDER BY deleted_at DESC, id DESC LIMIT ?)",
+        (DELETED_KEEP_MAX,),
+    )
+
+
+def _remember(conn, kind, event, occ_date, when_label, from_shelf, snapshot, now) -> None:
+    conn.execute(
+        "INSERT INTO recently_deleted (kind, event_id, occ_date, title, when_label, from_shelf, snapshot, deleted_at)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (kind, event["id"], occ_date, event["title"], when_label, 1 if from_shelf else 0,
+         json.dumps(snapshot), _deleted_stamp(now)),
+    )
+    purge_deleted(conn, now)
+
+
+def _remember_deleted_event(conn, event: dict, from_shelf: bool, now) -> None:
+    row = dict(conn.execute("SELECT * FROM events WHERE id = ?", (event["id"],)).fetchone())
+    excs = [dict(r) for r in conn.execute("SELECT * FROM event_exceptions WHERE event_id = ?", (event["id"],))]
+    if event["rrule"]:
+        label = recurrence.describe(event["rrule"], timeutil.parse_local(event["start_local"]).date(),
+                                    event["recurrence_end"])
+    else:
+        label = _when_label(event["start_local"], bool(event["all_day"]))
+    snapshot = {"event": row, "people": [p["id"] for p in event["people"]], "exceptions": excs}
+    _remember(conn, "event", event, None, label, from_shelf, snapshot, now)
+
+
+def list_recently_deleted(conn: sqlite3.Connection, now: datetime | None = None) -> list[dict]:
+    purge_deleted(conn, now)
+    conn.commit()
+    return [dict(r) for r in conn.execute("SELECT * FROM recently_deleted ORDER BY deleted_at DESC, id DESC")]
+
+
+_EVENT_COPY_COLS = (
+    "title", "location", "notes", "all_day", "start_local", "end_local", "category_id", "reminder_mode",
+    "reminder_minutes", "rrule", "recurrence_end", "source", "google_source", "google_uid", "google_last_seen",
+    "locally_modified", "created", "updated", "added_on_shelf",
+)
+
+
+def restore_deleted(conn: sqlite3.Connection, entry_id: int, now: datetime | None = None) -> str:
+    """Put a recently deleted event or date back. Returns a message; raises NotFoundError if it can't."""
+    purge_deleted(conn, now)
+    entry = conn.execute("SELECT * FROM recently_deleted WHERE id = ?", (entry_id,)).fetchone()
+    if entry is None:
+        conn.commit()
+        raise NotFoundError("That item is no longer in Recently deleted.")
+    snap = json.loads(entry["snapshot"])
+    try:
+        if entry["kind"] == "event":
+            row = snap["event"]
+            if get_category(conn, row["category_id"]) is None:
+                raise NotFoundError("Its category has been removed, so it can't be restored.")
+            people = [pid for pid in snap["people"] if get_person(conn, pid)]
+            if not people:
+                raise NotFoundError("Its people have been removed, so it can't be restored.")
+            # A fresh id: the old one may have been reused by a newer event.
+            cols = ", ".join(_EVENT_COPY_COLS)
+            cur = conn.execute(
+                f"INSERT INTO events ({cols}) VALUES ({','.join('?' * len(_EVENT_COPY_COLS))})",
+                tuple(row[c] for c in _EVENT_COPY_COLS),
+            )
+            new_id = cur.lastrowid
+            conn.executemany("INSERT INTO event_people (event_id, person_id) VALUES (?, ?)",
+                             [(new_id, pid) for pid in people])
+            for x in snap["exceptions"]:
+                conn.execute(
+                    "INSERT INTO event_exceptions (event_id, occ_date, skipped, start_local, end_local, title,"
+                    " location, notes, updated) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (new_id, x["occ_date"], x["skipped"], x["start_local"], x["end_local"], x["title"],
+                     x["location"], x["notes"], x["updated"]),
+                )
+            message = f"Restored “{entry['title']}”."
+        else:
+            event = get_event(conn, entry["event_id"])
+            if event is None or not event["rrule"]:
+                raise NotFoundError("The repeating event it belonged to has since been deleted or changed.")
+            conn.execute("DELETE FROM event_exceptions WHERE event_id = ? AND occ_date = ?",
+                         (entry["event_id"], entry["occ_date"]))
+            x = snap.get("exception")
+            if x:
+                conn.execute(
+                    "INSERT INTO event_exceptions (event_id, occ_date, skipped, start_local, end_local, title,"
+                    " location, notes, updated) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (entry["event_id"], entry["occ_date"], x["skipped"], x["start_local"], x["end_local"],
+                     x["title"], x["location"], x["notes"], x["updated"]),
+                )
+            message = f"Restored “{entry['title']}” on {entry['when_label']}."
+        conn.execute("DELETE FROM recently_deleted WHERE id = ?", (entry_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return message
+
+
+# --------------------------------------------- shelf actions (Phase 4, D48)
+
+
+def _shelf_target(conn: sqlite3.Connection, event_id: int, occ_date: str | None) -> tuple[dict, dict | None]:
+    """The event and, for a repeating one, the occurrence on occ_date. Raises NotFoundError."""
+    event = get_event(conn, event_id)
+    if event is None:
+        raise NotFoundError("That event has been deleted.")
+    if not event["rrule"]:
+        return event, None
+    occ = get_occurrence(conn, event_id, occ_date or "")
+    if occ is None or occ["skipped"]:
+        raise NotFoundError("That date is no longer part of the series.")
+    return event, occ
+
+
+def delete_from_shelf(conn: sqlite3.Connection, event_id: int, occ_date: str | None,
+                      now: datetime | None = None) -> str:
+    """Delete from the display: one date of a repeating event, or a one-off event (D48). Restorable (D51)."""
+    event, occ = _shelf_target(conn, event_id, occ_date)
+    if occ is None:
+        delete_event(conn, event_id, from_shelf=True, now=now)
+        return "event"
+    exc = get_exceptions(conn, event_id).get(occ_date)
+    try:
+        _remember(conn, "date", dict(event, title=occ["title"]), occ_date,
+                  _when_label(occ["start_local"], bool(event["all_day"])), True,
+                  {"exception": exc}, now)
+        conn.execute(
+            "INSERT INTO event_exceptions (event_id, occ_date, skipped, updated) VALUES (?, ?, 1, ?)"
+            " ON CONFLICT(event_id, occ_date) DO UPDATE SET skipped = 1, start_local = NULL, end_local = NULL,"
+            " title = NULL, location = NULL, notes = NULL, updated = excluded.updated",
+            (event_id, occ_date, _now_text()),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return "date"
+
+
+def _parse_move(new_date: str, new_time: str, all_day: bool) -> tuple[date, datetime | None]:
+    errors: dict[str, str] = {}
+    try:
+        d = timeutil.parse_date(new_date)
+    except (TypeError, ValueError):
+        d = None
+        errors["date"] = "Choose a day."
+    t = None
+    if not all_day:
+        if not TIME_RE.match(_clean(new_time)):
+            errors["time"] = "Choose a time."
+        else:
+            t = timeutil.parse_time(new_time)
+    if errors:
+        raise ValidationError(errors)
+    return d, (datetime.combine(d, t) if t else None)
+
+
+def move_from_shelf(conn: sqlite3.Connection, event_id: int, occ_date: str | None, new_date: str,
+                    new_time: str = "") -> dict:
+    """Move from the display, keeping the length (D48). A repeating event moves for that date only.
+
+    All-day events keep being all-day (the time is ignored); a multi-day one moves as a whole.
+    Returns the new start and end (local text).
+    """
+    event, occ = _shelf_target(conn, event_id, occ_date)
+    current = occ or event
+    start = timeutil.parse_local(current["start_local"])
+    end = timeutil.parse_local(current["end_local"])
+    all_day = bool(event["all_day"])
+    d, new_start = _parse_move(new_date, new_time, all_day)
+    if all_day:
+        shift = timedelta(days=(d - start.date()).days)
+        start_local = (start + shift).strftime(timeutil.DATE_FMT)
+        end_local = (end + shift).strftime(timeutil.DATE_FMT)
+    else:
+        start_local = new_start.strftime(timeutil.DT_FMT)
+        end_local = (new_start + (end - start)).strftime(timeutil.DT_FMT)
+    if occ is None:
+        conn.execute(
+            "UPDATE events SET start_local = ?, end_local = ?, updated = ?,"
+            " locally_modified = CASE WHEN source = 'google' THEN 1 ELSE locally_modified END WHERE id = ?",
+            (start_local, end_local, _now_text(), event_id),
+        )
+        conn.commit()
+    else:
+        s, e = timeutil.parse_local(start_local), timeutil.parse_local(end_local)
+        change_occurrence(conn, event, occ_date, OccurrenceInput(
+            title=occ["title"], location=occ["location"] or "", notes=occ["notes"] or "",
+            start_date=s.strftime(timeutil.DATE_FMT), start_time="" if all_day else s.strftime("%H:%M"),
+            end_date=e.strftime(timeutil.DATE_FMT), end_time="" if all_day else e.strftime("%H:%M"),
+        ))
+    return {"start": start_local, "end": end_local}
+
+
+def add_from_shelf(conn: sqlite3.Connection, title: str, day: str, time_text: str, all_day: bool,
+                   person_ids: list, category_id) -> int:
+    """Quick add from the display (D48): one hour long, or all day; the category's reminder; marked (D52)."""
+    event_id = save_event(conn, EventInput(
+        title=title, all_day=bool(all_day), start_date=day or "", end_date=day or "",
+        start_time="" if all_day else (time_text or ""), end_time="",
+        category_id=str(category_id if category_id is not None else ""),
+        person_ids=[str(p) for p in (person_ids or [])], reminder_mode="default",
+    ))
+    conn.execute("UPDATE events SET added_on_shelf = 1 WHERE id = ?", (event_id,))
+    conn.commit()
+    return event_id
+
+
+# --------------------------------------------------- Quick titles (D49)
+
+MAX_QUICK_TITLES_SHOWN = 10
+
+
+def list_quick_titles(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT q.id, q.title, q.category_id, c.name AS category_name, c.color AS category_color"
+        " FROM quick_titles q LEFT JOIN categories c ON c.id = q.category_id ORDER BY q.title COLLATE NOCASE"
+    )
+    return [dict(r) for r in rows]
+
+
+def get_quick_title(conn: sqlite3.Connection, qt_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM quick_titles WHERE id = ?", (qt_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def save_quick_title(conn: sqlite3.Connection, title: str, category_id=None, qt_id: int | None = None) -> int:
+    errors: dict[str, str] = {}
+    title = _clean(title)
+    if not title:
+        errors["title"] = "Enter a title."
+    elif len(title) > MAX_TITLE:
+        errors["title"] = f"Keep the title to {MAX_TITLE} characters or fewer."
+    cat_id = None
+    if category_id not in (None, ""):
+        try:
+            cat_id = int(category_id)
+        except (TypeError, ValueError):
+            cat_id = -1
+        if get_category(conn, cat_id) is None:
+            errors["category"] = "That category no longer exists."
+    if not errors:
+        clash = conn.execute("SELECT id FROM quick_titles WHERE title = ? COLLATE NOCASE AND id IS NOT ?",
+                             (title, qt_id)).fetchone()
+        if clash:
+            errors["title"] = "That title is already on the list."
+    if errors:
+        raise ValidationError(errors)
+    if qt_id is None:
+        cur = conn.execute("INSERT INTO quick_titles (title, category_id, created) VALUES (?, ?, ?)",
+                           (title, cat_id, _now_text()))
+        qt_id = cur.lastrowid
+    else:
+        conn.execute("UPDATE quick_titles SET title = ?, category_id = ? WHERE id = ?", (title, cat_id, qt_id))
+    conn.commit()
+    return qt_id
+
+
+def delete_quick_title(conn: sqlite3.Connection, qt_id: int) -> None:
+    conn.execute("DELETE FROM quick_titles WHERE id = ?", (qt_id,))
+    conn.commit()
+
+
+def suggest_quick_titles(conn: sqlite3.Connection, limit: int = 15) -> list[dict]:
+    """Titles used on two or more events (a repeating event counts once) that aren't on the list yet.
+
+    Each comes with the category used most often for it.
+    """
+    rows = conn.execute(
+        "SELECT e.title, COUNT(*) AS uses, (SELECT e2.category_id FROM events e2 WHERE e2.title = e.title"
+        " COLLATE NOCASE GROUP BY e2.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id"
+        " FROM events e WHERE e.title COLLATE NOCASE NOT IN (SELECT title FROM quick_titles)"
+        " GROUP BY e.title COLLATE NOCASE HAVING COUNT(*) >= 2 ORDER BY uses DESC, e.title COLLATE NOCASE LIMIT ?",
+        (limit,),
+    )
+    return [dict(r) for r in rows]

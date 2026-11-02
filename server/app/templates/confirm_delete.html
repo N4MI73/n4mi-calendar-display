@@ -10,6 +10,7 @@
   <p>{% for p in event.people %}<span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span>{% endfor %}
      <span class="pill category"><span class="swatch" style="background: {{ event.category_color }}" aria-hidden="true"></span>{{ event.category_name }}</span></p>
 </div>
+<p class="hint">You can put it back from <a href="/recently-deleted">Recently deleted</a> for the next 3 days.</p>
 <form method="post" class="actions">
   <button class="btn btn-danger" type="submit">Delete</button>
   <a class="btn btn-quiet" href="/">Keep it</a>

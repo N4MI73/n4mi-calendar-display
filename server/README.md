@@ -4,7 +4,8 @@ FastAPI + SQLite. Serves the editor (works on a computer or a phone), the
 shelf display page (`/display`) and the display's JSON API (`/api/v1/...`).
 
 The editor manages events (one-off and repeating), household "I did it"
-reminders, people, categories and display settings.
+reminders, people, categories, display settings, the shelf's quick titles and
+recently deleted events. The shelf display can add, move and delete events.
 
 ## Running it
 
@@ -138,6 +139,40 @@ pulls a finished image (`pull_policy: always`).
   (`/api/v2/...`) answers 404 with `"error": "unsupported_api_version"`.
 - `POST /api/v1/reminders/{id}/done` and `/undo` — "I did it" and Undo from
   the display. 409 when there is nothing to tick or undo.
+- Phase 4 additions (fields only added): each event carries `notes`,
+  `repeat_text` and `changed`; the payload carries `people`, `categories` and
+  up to 10 `quick_titles` for the Add form.
+
+## Actions on the shelf (Phase 4)
+
+- Tapping an entry in Today or Coming up opens its details (time, place,
+  people, category, repeat, notes) with **Move**, **Delete** and **Close**. A
+  panel left untouched for a minute closes by itself; night closes it too.
+- **Move** keeps the event's length; an all-day event stays all-day and a
+  multi-day one moves as a whole. **Delete** asks first. On a repeating event,
+  both affect that date only; whole-series changes stay in the editor.
+- **Add** is two steps: the title (a quick title, or the page's own keyboard),
+  then day, time or all day, people and category. The reminder is the
+  category's default. Events added this way are tagged "Added on the shelf" in
+  the editor.
+- Coming up scrolls, and goes back to the top after 30 seconds untouched.
+- Changes need the server. When the schedule isn't current, Add, Move and
+  Delete are dimmed with a plain message; nothing is queued for later.
+- API (JSON bodies; errors `400 invalid` with `fields`, `404 not_found`):
+  - `POST /api/v1/events` — `{title, date, time, all_day, people: [ids], category_id}`; one hour long.
+  - `POST /api/v1/events/{id}/move` — `{occ, date, time}`; `occ` is the
+    original date for one date of a repeating event, `null` otherwise.
+  - `POST /api/v1/events/{id}/delete` — `{occ}`.
+
+## Quick titles and Recently deleted (editor)
+
+- **Quick titles** (Settings → Quick titles): the one-tap titles on the
+  shelf's Add form, each with an optional category. "Suggest from my events"
+  lists titles used on two or more events.
+- **Recently deleted** (Events page, or Settings): deleted events, and dates
+  deleted from the shelf, can be restored for 3 days (at most the 20 most
+  recent), then are removed for good. A date skipped on purpose in the editor
+  isn't listed.
 
 ## Times
 
