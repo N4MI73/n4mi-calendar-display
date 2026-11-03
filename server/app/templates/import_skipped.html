@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% set active = 'import' %}
+{% block title %}Skipped Google events{% endblock %}
+{% block content %}
+<h1>Skipped Google events</h1>
+<p class="hint">Google events you chose not to import, or deleted here after importing. They aren't offered again. “Offer again” puts one back on the review list at the next fetch.</p>
+<ul class="list">
+{% for k in skips %}
+  <li class="list-row">
+    <span class="title">{{ k.title or '(No title)' }}</span>
+    <span class="meta">skipped {{ fmt_deleted(k.created) }}</span>
+    <form method="post" action="/import/skipped/unskip" class="inline">
+      <input type="hidden" name="slot" value="{{ k.slot }}"><input type="hidden" name="uid" value="{{ k.uid }}">
+      <button class="btn btn-quiet btn-small" type="submit">Offer again</button>
+    </form>
+  </li>
+{% else %}
+  <li class="empty">Nothing skipped.</li>
+{% endfor %}
+</ul>
+<p class="subnav"><a href="/import">Back to Import</a></p>
+{% endblock %}

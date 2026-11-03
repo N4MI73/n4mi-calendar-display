@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set active = 'import' %}
+{% block title %}Import{% endblock %}
+{% block content %}
+<h1>Import from Google</h1>
+<p class="hint">Reads your Google calendar and lists what's new or changed for you to review. Nothing reaches this calendar until you choose it, and nothing is ever written to Google.</p>
+
+{% if not sources %}
+<div class="notice">
+  <p><strong>No Google calendar is set up yet.</strong></p>
+  <p>In Google Calendar on a computer: Settings → your calendar under “Settings for my calendars” → <em>Integrate calendar</em> → copy the <strong>Secret address in iCal format</strong>.</p>
+  <p>In Portainer (n4misrv environment): Stacks → n4mi-calendar-display → Editor → Environment variables → add <code>CAL_SOURCE_1_URL</code> with that address as its value → Update the stack.</p>
+  <p>Keep the address private: anyone who has it can read the calendar. If it's ever exposed, use <em>Reset</em> beside it in Google and put the new one in Portainer.</p>
+</div>
+{% endif %}
+
+{% for s in sources %}
+<section class="card">
+  <p class="title">{{ s.name }}</p>
+  {% if not s.configured %}
+  <p class="notice">Its address (<code>CAL_SOURCE_{{ s.slot }}_URL</code>) isn't set in Portainer any more, so it can't be fetched.</p>
+  {% endif %}
+  <p class="meta">Added with: {% if s.people_names %}{{ s.people_names|join(', ') }}{% else %}<em>no default people</em>{% endif %} · {{ s.category_name or 'no default category' }} · <a href="/import/sources/{{ s.slot }}">Change</a></p>
+  <p class="meta">{% if s.last_fetch %}Last fetched {{ fmt_deleted(s.last_fetch) }}: {{ s.last_result }}{% else %}Not fetched yet.{% endif %}</p>
+  <div class="actions">
+    {% if s.configured %}
+    <form method="post" action="/import/{{ s.slot }}/fetch" class="inline"><button class="btn btn-primary" type="submit">Fetch from Google</button></form>
+    {% endif %}
+    {% if s.pending %}<a class="btn" href="/import/review">Review {{ s.pending }} item{{ '' if s.pending == 1 else 's' }}</a>{% endif %}
+  </div>
+</section>
+{% endfor %}
+
+<p class="subnav"><a href="/import/skipped">Skipped Google events{% if skipped_count %} ({{ skipped_count }}){% endif %}</a></p>
+{% endblock %}

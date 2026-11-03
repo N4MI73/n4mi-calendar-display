@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% set active = 'import' %}
+{% block title %}Review import{% endblock %}
+{% block content %}
+<h1>Review import</h1>
+{% if not groups.total %}
+<p class="empty">Nothing to review. <a href="/import">Back to Import</a></p>
+{% endif %}
+
+{% if groups.new %}
+<section>
+  <h2>New in Google ({{ groups.new|length }})</h2>
+  <p class="hint">Tick the ones to add with this source's default people and category, or open one to check it first. Skipped events aren't offered again.</p>
+  <form method="post" action="/import/review/add-ticked" class="form" id="addform">
+    <p><button type="button" class="btn btn-quiet btn-small" onclick="document.querySelectorAll('#addform input[name=item]').forEach(function(c){c.checked=true})">Tick all</button>
+       <button type="button" class="btn btn-quiet btn-small" onclick="document.querySelectorAll('#addform input[name=item]').forEach(function(c){c.checked=false})">Untick all</button></p>
+  </form>
+  <ul class="list">
+  {% for it in groups.new %}
+    <li class="list-row import-row">
+      <label class="choice"><input type="checkbox" name="item" value="{{ it.id }}" form="addform"> <span><span class="title">{{ it.g.title }}</span><br><span class="meta">{{ it.when }}{% if it.g.location %} · {{ it.g.location }}{% endif %}</span>
+      {% if it.overlaps %}<br><span class="meta">Overlaps: {{ it.overlaps|join(', ') }}</span>{% endif %}</span></label>
+      <a class="btn btn-small" href="/import/items/{{ it.id }}/add">Review and add</a>
+      <form method="post" action="/import/items/{{ it.id }}/skip" class="inline"><button class="btn btn-quiet btn-small" type="submit">Skip</button></form>
+    </li>
+  {% endfor %}
+  </ul>
+  <div class="actions"><button class="btn btn-primary" type="submit" form="addform">Add ticked with defaults</button>
+    <span class="meta">({{ defaults_text }})</span></div>
+</section>
+{% endif %}
+
+{% if groups.duplicate %}
+<section>
+  <h2>Already here? ({{ groups.duplicate|length }})</h2>
+  <p class="hint"><strong>Link</strong> keeps your version (people, category, reminder and wording) and remembers that it's this Google event. <strong>Not the same</strong> moves it to New. <strong>Skip</strong> ignores the Google copy.</p>
+  <ul class="list">
+  {% for it in groups.duplicate %}
+    <li class="list-row import-row">
+      <span><span class="title">Google: {{ it.g.title }}</span><br><span class="meta">{{ it.when }}</span><br>
+      <span class="title">Here: {{ it.local_title }}</span><br><span class="meta">{{ it.local_when }}</span></span>
+      <form method="post" action="/import/items/{{ it.id }}/link" class="inline"><button class="btn btn-primary btn-small" type="submit">Link</button></form>
+      <form method="post" action="/import/items/{{ it.id }}/keep-both" class="inline"><button class="btn btn-small" type="submit">Not the same</button></form>
+      <form method="post" action="/import/items/{{ it.id }}/skip" class="inline"><button class="btn btn-quiet btn-small" type="submit">Skip</button></form>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if groups.changed %}
+<section>
+  <h2>Changed in Google ({{ groups.changed|length }})</h2>
+  <p class="hint">You haven't changed these here, so Google's version can simply be used. People, category and reminder are never changed by an import.</p>
+  <form method="post" action="/import/review/apply-all" class="actions"><button class="btn btn-primary" type="submit">Apply all {{ groups.changed|length }}</button></form>
+  <ul class="list">
+  {% for it in groups.changed %}
+    <li class="list-row import-row">
+      <span><span class="title">{{ it.g.title }}</span>
+      {% for r in it.rows %}<br><span class="meta">{{ r.name }}: {{ r.here }} → <strong>{{ r.google }}</strong></span>{% endfor %}</span>
+      <form method="post" action="/import/items/{{ it.id }}/apply" class="inline"><button class="btn btn-small" type="submit">Apply</button></form>
+      <form method="post" action="/import/items/{{ it.id }}/keep-mine" class="inline"><button class="btn btn-quiet btn-small" type="submit">Keep mine</button></form>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if groups.conflict %}
+<section>
+  <h2>Changed in both places ({{ groups.conflict|length }})</h2>
+  <p class="hint">You edited these here, and they've also changed in Google. Choose which version to keep.</p>
+  <ul class="list">
+  {% for it in groups.conflict %}
+    <li class="list-row import-row">
+      <span><span class="title">{{ it.local_title }}</span>
+      {% for r in it.rows %}<br><span class="meta">{{ r.name }}: here {{ r.here }} · Google <strong>{{ r.google }}</strong></span>{% endfor %}</span>
+      <form method="post" action="/import/items/{{ it.id }}/keep-mine" class="inline"><button class="btn btn-small" type="submit">Keep mine</button></form>
+      <form method="post" action="/import/items/{{ it.id }}/apply" class="inline"><button class="btn btn-small" type="submit">Use Google's</button></form>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if groups.removed %}
+<section>
+  <h2>No longer in Google ({{ groups.removed|length }})</h2>
+  <p class="hint">These were imported or linked, and have since been deleted in Google. Delete them here too (you can restore from Recently deleted for 3 days), or keep them as ordinary events.</p>
+  <ul class="list">
+  {% for it in groups.removed %}
+    <li class="list-row import-row">
+      <span><span class="title">{{ it.local_title }}</span><br><span class="meta">{{ it.local_when }}</span></span>
+      <form method="post" action="/import/items/{{ it.id }}/delete" class="inline"><button class="btn btn-danger btn-small" type="submit">Delete here</button></form>
+      <form method="post" action="/import/items/{{ it.id }}/keep" class="inline"><button class="btn btn-small" type="submit">Keep</button></form>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if groups.same_uid %}
+<section>
+  <h2>In more than one Google calendar ({{ groups.same_uid|length }})</h2>
+  <p class="hint">The same Google event is already here from another calendar. Choose which calendar to follow it from; the choice is remembered.</p>
+  <ul class="list">
+  {% for it in groups.same_uid %}
+    <li class="list-row import-row">
+      <span><span class="title">{{ it.g.title }}</span><br><span class="meta">{{ it.when }}</span></span>
+      <form method="post" action="/import/items/{{ it.id }}/use-this" class="inline"><button class="btn btn-small" type="submit">Follow from this calendar</button></form>
+      <form method="post" action="/import/items/{{ it.id }}/skip" class="inline"><button class="btn btn-quiet btn-small" type="submit">Keep the other</button></form>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+<p class="subnav"><a href="/import">Back to Import</a></p>
+{% endblock %}

@@ -216,3 +216,8 @@ select.unit { width: auto; min-height: 44px; }
   border: 1px solid #8E95A2;
   color: #D7DBE2;
 }
+
+/* Phase 5a: import review rows wrap their buttons under the text on a phone. */
+.import-row { flex-wrap: wrap; align-items: flex-start; }
+.import-row > span, .import-row > label { flex: 1 1 18rem; min-width: 0; }
+.list-row .meta { overflow-wrap: anywhere; }

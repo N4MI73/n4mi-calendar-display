@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set active = 'import' %}
+{% block title %}Import source{% endblock %}
+{% block content %}
+<h1>{{ form.name or 'Import source' }}</h1>
+<p class="hint">The name shown on the Import page, and the people and category used by “Add ticked with defaults”. The calendar's address is kept in Portainer only (<code>CAL_SOURCE_{{ slot }}_URL</code>).</p>
+<form method="post" class="form compact" novalidate>
+  <div class="field {% if errors.name %}has-error{% endif %}">
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" maxlength="60" value="{{ form.name }}" required>
+    {% if errors.name %}<p class="err">{{ errors.name }}</p>{% endif %}
+  </div>
+  <fieldset class="field">
+    <legend>Default people</legend>
+    <div class="choices">
+    {% for p in people %}
+      <label class="choice"><input type="checkbox" name="people" value="{{ p.id }}" {% if p.id in form.people_ids %}checked{% endif %}> <span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span></label>
+    {% endfor %}
+    </div>
+  </fieldset>
+  <div class="field {% if errors.category %}has-error{% endif %}">
+    <label for="category_id">Default category</label>
+    <select id="category_id" name="category_id">
+      <option value="">None</option>
+      {% for k in categories %}<option value="{{ k.id }}" {% if form.category_id|string == k.id|string %}selected{% endif %}>{{ k.name }}</option>{% endfor %}
+    </select>
+    {% if errors.category %}<p class="err">{{ errors.category }}</p>{% endif %}
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Save</button>
+    <a class="btn btn-quiet" href="/import">Cancel</a>
+  </div>
+</form>
+{% endblock %}

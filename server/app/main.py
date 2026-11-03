@@ -23,9 +23,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, display, recurrence, store, timeutil
+from . import db, display, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 BASE_DIR = Path(__file__).parent
 
 
@@ -864,6 +864,236 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         return redirect("/categories", f"Removed {cat['name']}.")
+
+    # ------------------------------------------------ Google import (Phase 5a)
+
+    def _fmt_value(key, v, g):
+        if key in ("start_local", "end_local") and v:
+            return _fmt_when(v) if "T" in v else _date_label(v)
+        if key == "all_day":
+            return "yes" if v else "no"
+        if key == "rrule":
+            return recurrence.describe(v, timeutil.parse_local(g["start_local"]).date()) if v else "doesn't repeat"
+        if key == "recurrence_end":
+            return _date_label(v) if v else "no end"
+        if key == "exdates":
+            return ", ".join(_date_label(d) for d in v) or "none"
+        if key == "overrides":
+            return ", ".join(_date_label(d) for d in v) or "none"
+        return v or "(blank)"
+
+    def _rows(here: dict, google: dict) -> list[dict]:
+        a, b = importer._norm(here), importer._norm(google)
+        return [{"name": importer.FIELD_NAMES[k], "here": _fmt_value(k, a[k], a), "google": _fmt_value(k, b[k], b)}
+                for k in a if a[k] != b[k]]
+
+    def _local_when(ev: dict) -> str:
+        text = f"{_event_date(ev)} · {_event_when(ev)}"
+        if ev["rrule"]:
+            text += " · " + recurrence.describe(ev["rrule"], _event_start_date(ev), ev["recurrence_end"])
+        return text
+
+    @app.get("/import", response_class=HTMLResponse)
+    def import_page(request: Request):
+        c = conn()
+        try:
+            sources = importer.list_sources(c)
+            people = {p["id"]: p["name"] for p in store.list_people(c)}
+            cats = {k["id"]: k["name"] for k in store.list_categories(c)}
+            for s_ in sources:
+                s_["people_names"] = [people[i] for i in s_["people_ids"] if i in people]
+                s_["category_name"] = cats.get(s_["default_category_id"])
+            skipped = len(importer.list_skips(c))
+        finally:
+            c.close()
+        return render(request, "import.html", sources=sources, skipped_count=skipped)
+
+    @app.post("/import/{slot}/fetch")
+    def import_fetch(slot: int):
+        if slot not in importer.configured_slots():
+            return redirect("/import", "That source isn't set up in Portainer.")
+        c = conn()
+        try:
+            try:
+                counts = importer.fetch_source(c, slot)
+            except ical_import.FetchError as exc:
+                return redirect("/import", f"Couldn't read the Google calendar: {exc}")
+        finally:
+            c.close()
+        pending = sum(counts[k] for k in importer.KINDS)
+        if not pending:
+            return redirect("/import", f"Fetched {counts['events']} events. Nothing new to review.")
+        return redirect("/import/review", f"Fetched {counts['events']} events. {pending} to review.")
+
+    @app.get("/import/review", response_class=HTMLResponse)
+    def import_review(request: Request):
+        c = conn()
+        try:
+            today = timeutil.now_local().date()
+            groups = {k: [] for k in importer.KINDS}
+            for it in importer.list_items(c):
+                g = it["g"]
+                if g:
+                    it["when"] = importer.when_label(g, today)
+                ev = store.get_event(c, it["event_id"]) if it["event_id"] else None
+                if ev:
+                    it["local_title"] = ev["title"]
+                    it["local_when"] = _local_when(ev)
+                if it["kind"] == "new":
+                    it["overlaps"] = importer.overlaps(c, g, today)
+                if it["kind"] in ("changed", "conflict") and ev:
+                    it["rows"] = _rows(importer.local_version(c, ev), g)
+                if it["kind"] in ("duplicate", "changed", "conflict", "removed", "same_uid") and not ev:
+                    continue   # its event has gone since the fetch; the next fetch tidies up
+                groups[it["kind"]].append(it)
+            groups["total"] = sum(len(v) for v in groups.values())
+            names = []
+            for s_ in importer.list_sources(c):
+                pn = [p["name"] for p in store.list_people(c) if p["id"] in s_["people_ids"]]
+                cat = store.get_category(c, s_["default_category_id"]) if s_["default_category_id"] else None
+                names.append(f"{s_['name']}: " + (", ".join(pn) or "no people set") + " · "
+                             + (cat["name"] if cat else "no category set"))
+        finally:
+            c.close()
+        return render(request, "import_review.html", groups=groups, defaults_text="; ".join(names))
+
+    @app.post("/import/review/add-ticked")
+    async def import_add_ticked(request: Request):
+        f = await request.form()
+        ids = [int(x) for x in f.getlist("item") if str(x).isdigit()]
+        if not ids:
+            return redirect("/import/review", "Nothing was ticked.")
+        c = conn()
+        try:
+            try:
+                n = importer.add_with_defaults(c, ids)
+            except importer.ImportError_ as exc:
+                return redirect("/import/review", str(exc))
+        finally:
+            c.close()
+        return redirect("/import/review", f"Added {n} event{'s' if n != 1 else ''}.")
+
+    @app.post("/import/review/apply-all")
+    def import_apply_all():
+        c = conn()
+        try:
+            n = importer.apply_all(c)
+        finally:
+            c.close()
+        return redirect("/import/review", f"Applied {n} change{'s' if n != 1 else ''} from Google.")
+
+    @app.get("/import/items/{item_id}/add", response_class=HTMLResponse)
+    def import_item_form(request: Request, item_id: int):
+        c = conn()
+        try:
+            it = importer.get_item(c, item_id)
+            if not it or it["kind"] != "new":
+                return redirect("/import/review", "That item has already been dealt with.")
+            return render(request, "event_form.html", form=importer.form_for_item(c, it), event_id=None, errors={},
+                          people=store.list_people(c), categories=store.list_categories(c), exceptions=[],
+                          future=None, future_label="", dropped=[], shelf_added=False, import_item=it,
+                          cancel_href="/import/review")
+        finally:
+            c.close()
+
+    @app.post("/import/items/{item_id}/add", response_class=HTMLResponse)
+    async def import_item_save(request: Request, item_id: int):
+        form = _form_to_input(await request.form())
+        c = conn()
+        try:
+            it = importer.get_item(c, item_id)
+            if not it or it["kind"] != "new":
+                return redirect("/import/review", "That item has already been dealt with.")
+            try:
+                importer.add_reviewed(c, item_id, form)
+            except store.ValidationError as exc:
+                return render(request, "event_form.html", status_code=400, form=form, event_id=None,
+                              errors=exc.errors, people=store.list_people(c), categories=store.list_categories(c),
+                              exceptions=[], future=None, future_label="", dropped=[], shelf_added=False,
+                              import_item=it, cancel_href="/import/review")
+        finally:
+            c.close()
+        return redirect("/import/review", f"Added “{form.title.strip()}”.")
+
+    _ITEM_ACTIONS = {
+        "skip": (importer.skip, "Skipped. It won't be offered again."),
+        "link": (importer.link, "Linked. Your version is kept."),
+        "keep-both": (importer.keep_both, "Moved to New."),
+        "apply": (importer.apply_change, "Google's version applied."),
+        "keep-mine": (importer.keep_mine, "Kept your version."),
+        "delete": (importer.removed_delete, "Deleted here. It can be restored from Recently deleted for 3 days."),
+        "keep": (importer.removed_keep, "Kept as an ordinary event."),
+        "use-this": (importer.use_this_copy, "Done. It follows this calendar from now on."),
+    }
+
+    @app.post("/import/items/{item_id}/{action}")
+    def import_item_action(item_id: int, action: str):
+        if action not in _ITEM_ACTIONS:
+            return redirect("/import/review", "Unknown action.")
+        fn, done = _ITEM_ACTIONS[action]
+        c = conn()
+        try:
+            try:
+                fn(c, item_id)
+            except importer.ImportError_ as exc:
+                return redirect("/import/review", str(exc))
+        finally:
+            c.close()
+        return redirect("/import/review", done)
+
+    @app.get("/import/sources/{slot}", response_class=HTMLResponse)
+    def import_source_page(request: Request, slot: int):
+        c = conn()
+        try:
+            src = importer.get_source(c, slot)
+            if not src:
+                return redirect("/import", "That source isn't set up.")
+            form = {"name": src["name"], "people_ids": src["people_ids"],
+                    "category_id": src["default_category_id"] or ""}
+            return render(request, "import_source.html", slot=slot, form=form, errors={},
+                          people=store.list_people(c), categories=store.list_categories(c))
+        finally:
+            c.close()
+
+    @app.post("/import/sources/{slot}", response_class=HTMLResponse)
+    async def import_source_save(request: Request, slot: int):
+        f = await request.form()
+        c = conn()
+        try:
+            if not importer.get_source(c, slot):
+                return redirect("/import", "That source isn't set up.")
+            try:
+                importer.save_source(c, slot, f.get("name", ""), f.getlist("people"), f.get("category_id", ""))
+            except store.ValidationError as exc:
+                form = {"name": f.get("name", ""), "people_ids": [int(x) for x in f.getlist("people") if x.isdigit()],
+                        "category_id": f.get("category_id", "")}
+                return render(request, "import_source.html", status_code=400, slot=slot, form=form,
+                              errors=exc.errors, people=store.list_people(c), categories=store.list_categories(c))
+        finally:
+            c.close()
+        return redirect("/import", "Saved.")
+
+    @app.get("/import/skipped", response_class=HTMLResponse)
+    def import_skipped(request: Request):
+        c = conn()
+        try:
+            skips = importer.list_skips(c)
+        finally:
+            c.close()
+        return render(request, "import_skipped.html", skips=skips)
+
+    @app.post("/import/skipped/unskip")
+    async def import_unskip(request: Request):
+        f = await request.form()
+        c = conn()
+        try:
+            try:
+                importer.unskip(c, int(f.get("slot", "0")), f.get("uid", ""))
+            except ValueError:
+                pass
+        finally:
+            c.close()
+        return redirect("/import/skipped", "It will be offered again at the next fetch.")
 
     # ------------------------------------------------- Quick titles (D49)
 

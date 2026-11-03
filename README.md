@@ -6,7 +6,7 @@ browser editor that also works on a phone, and a shelf-mounted touch display
 
 It is independent of Google, Apple and other cloud calendars. Google Calendar
 is used only as a read-only import source, and only when the owner starts an
-import (a later phase).
+import.
 
 ## What's here
 
@@ -30,8 +30,11 @@ import (a later phase).
 - **Phase 4:** add, move and delete from the shelf display (with quick
   titles and its own on-screen keyboard), event details with notes, a
   scrolling Coming up, and a Recently deleted list in the editor.
-- **Next:** Google import and review, then hardening the Pi as an unattended
-  appliance.
+- **Phase 5a:** read-only import from a Google calendar's private iCal
+  address, with a review page (new, already here, changed, removed) where
+  nothing changes until the owner chooses.
+- **Next:** "Not in Google" and US holidays (Phase 5b), then hardening the Pi
+  as an unattended appliance.
 
 ## Privacy
 

@@ -5,7 +5,8 @@ shelf display page (`/display`) and the display's JSON API (`/api/v1/...`).
 
 The editor manages events (one-off and repeating), household "I did it"
 reminders, people, categories, display settings, the shelf's quick titles and
-recently deleted events. The shelf display can add, move and delete events.
+recently deleted events, and reviews imports from Google Calendar (read only).
+The shelf display can add, move and delete events.
 
 ## Running it
 
@@ -24,9 +25,7 @@ recently deleted events. The shelf display can add, move and delete events.
 | --- | --- | --- |
 | `TZ` | `America/New_York` | Household time zone. All times are stored as local wall-clock times in this zone. |
 | `CAL_DB_PATH` | `/data/calendar.db` | Where the database lives inside the container. |
-
-There are no secrets yet. Google import URLs arrive in a later phase and will
-be set only as Portainer environment variables, never in this repository.
+| `CAL_SOURCE_1_URL` | (none) | The Google calendar's **private iCal address**. A credential: set it in Portainer only, never in this repository. `CAL_SOURCE_2_URL` … `_5_` add more calendars (add a matching line to the compose file). |
 
 ### How an update reaches the server
 
@@ -163,6 +162,36 @@ pulls a finished image (`pull_policy: always`).
   - `POST /api/v1/events/{id}/move` — `{occ, date, time}`; `occ` is the
     original date for one date of a repeating event, `null` otherwise.
   - `POST /api/v1/events/{id}/delete` — `{occ}`.
+
+## Google import (Phase 5a)
+
+- **Setting up:** in Google Calendar on a computer, Settings → the calendar
+  under "Settings for my calendars" → Integrate calendar → copy **Secret
+  address in iCal format**. Put it in Portainer as `CAL_SOURCE_1_URL` and
+  update the stack. If it's ever exposed, use Reset beside it in Google and
+  put the new one in Portainer. The address is never stored in the database,
+  shown on a page or written to a log; errors name only what went wrong.
+- **Import** (top menu): name the source and set the people and category used
+  for "Add ticked with defaults", then **Fetch from Google**. Fetching runs
+  only when pressed; nothing is polled.
+- A fetch reads events from today to 12 months ahead (a repeating series comes
+  in whole) and lists, for review: **New** (add ticked with defaults, review
+  and add, or skip; skips are remembered), **Already here?** (a hand-entered
+  event that looks the same: Link keeps your version and remembers the Google
+  event), **Changed in Google** (Apply all, for events not edited here),
+  **Changed in both places** (keep mine or use Google's), **No longer in
+  Google** (delete here or keep), and the same event in two calendars. Nothing
+  changes until you choose. People, category and reminder are never changed
+  by an import.
+- Each imported or linked event keeps a snapshot of Google's version as last
+  accepted (`events.google_snapshot`), which is how a later fetch tells
+  "changed in Google" from "edited here".
+- Deleting an imported event (editor or shelf) marks it skipped, so the next
+  fetch doesn't offer it again; restoring it from Recently deleted undoes that.
+  **Import → Skipped Google events** can offer any skipped event again.
+- Repeating events come in as a series, with Google's skipped and changed
+  dates. Times are converted to local wall-clock time in `TZ`.
+- Parsing uses the `icalendar` library.
 
 ## Quick titles and Recently deleted (editor)
 

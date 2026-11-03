@@ -492,6 +492,10 @@ def delete_event(conn: sqlite3.Connection, event_id: int, from_shelf: bool = Fal
         return
     try:
         _remember_deleted_event(conn, event, from_shelf, now)
+        if event.get("google_uid") and event.get("google_source"):
+            # An imported event that's deleted here isn't offered again by the next import (Phase 5a).
+            conn.execute("INSERT OR REPLACE INTO import_skips (slot, uid, title, created) VALUES (?, ?, ?, ?)",
+                         (int(event["google_source"]), event["google_uid"], event["title"], _now_text()))
         conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
         conn.commit()
     except Exception:
@@ -1154,7 +1158,7 @@ def list_recently_deleted(conn: sqlite3.Connection, now: datetime | None = None)
 _EVENT_COPY_COLS = (
     "title", "location", "notes", "all_day", "start_local", "end_local", "category_id", "reminder_mode",
     "reminder_minutes", "rrule", "recurrence_end", "source", "google_source", "google_uid", "google_last_seen",
-    "locally_modified", "created", "updated", "added_on_shelf",
+    "locally_modified", "created", "updated", "added_on_shelf", "google_snapshot",
 )
 
 
@@ -1178,7 +1182,7 @@ def restore_deleted(conn: sqlite3.Connection, entry_id: int, now: datetime | Non
             cols = ", ".join(_EVENT_COPY_COLS)
             cur = conn.execute(
                 f"INSERT INTO events ({cols}) VALUES ({','.join('?' * len(_EVENT_COPY_COLS))})",
-                tuple(row[c] for c in _EVENT_COPY_COLS),
+                tuple(row.get(c) for c in _EVENT_COPY_COLS),
             )
             new_id = cur.lastrowid
             conn.executemany("INSERT INTO event_people (event_id, person_id) VALUES (?, ?)",
@@ -1190,6 +1194,9 @@ def restore_deleted(conn: sqlite3.Connection, entry_id: int, now: datetime | Non
                     (new_id, x["occ_date"], x["skipped"], x["start_local"], x["end_local"], x["title"],
                      x["location"], x["notes"], x["updated"]),
                 )
+            if row.get("google_uid") and row.get("google_source"):
+                conn.execute("DELETE FROM import_skips WHERE slot = ? AND uid = ?",
+                             (int(row["google_source"]), row["google_uid"]))
             message = f"Restored “{entry['title']}”."
         else:
             event = get_event(conn, entry["event_id"])

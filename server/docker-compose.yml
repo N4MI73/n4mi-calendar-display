@@ -15,8 +15,10 @@
 #   sudo chown 1000:1000 /srv/docker/n4mi-calendar-display/data
 # The SQLite database lives there, where the nightly host backup picks it up.
 #
-# No secrets in this file. (Google import URLs arrive in a later phase and will
-# be Portainer environment variables only.)
+# No secrets in this file. The Google calendar's private ("secret") iCal address
+# is a credential: set it only in Portainer (Stacks -> n4mi-calendar-display ->
+# Environment variables) as CAL_SOURCE_1_URL. The line below passes it through
+# by name, with no value here. A second calendar would be CAL_SOURCE_2_URL.
 
 services:
   calendar:
@@ -28,5 +30,6 @@ services:
       - "8087:8087"
     environment:
       - TZ=America/New_York
+      - CAL_SOURCE_1_URL
     volumes:
       - /srv/docker/n4mi-calendar-display/data:/data

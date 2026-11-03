@@ -4,7 +4,10 @@
 {% set active = 'events' %}
 {% block title %}{{ 'Edit event' if event_id else 'Add event' }}{% endblock %}
 {% block content %}
-{% if future %}
+{% if import_item %}
+<h1>Add from Google</h1>
+<p class="hint">Check the details, then Save. It's tied to the Google event, so later imports recognise it.</p>
+{% elif future %}
 <h1>Change this and later dates</h1>
 <p class="hint">Changes start on {{ future_label }}. Earlier dates stay as they were.</p>
 {% else %}
@@ -120,7 +123,7 @@
 
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{ 'Save anyway' if dropped else 'Save' }}</button>
-    <a class="btn btn-quiet" href="/">Cancel</a>
+    <a class="btn btn-quiet" href="{{ cancel_href or '/' }}">Cancel</a>
     {% if event_id and not future %}<a class="btn btn-danger push-right" href="/events/{{ event_id }}/delete">{{ 'Delete series' if form.repeat != 'none' else 'Delete' }}</a>{% endif %}
   </div>
 </form>
