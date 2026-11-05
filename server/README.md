@@ -193,6 +193,26 @@ pulls a finished image (`pull_policy: always`).
   dates. Times are converted to local wall-clock time in `TZ`.
 - Parsing uses the `icalendar` library.
 
+## Not in Google, title rules and holidays (Phase 5b)
+
+- **Not in Google** (Import → Not in Google): local events from today to 12
+  months ahead that aren't tied to a Google event, as of the last fetch. **Add
+  to Google** opens Google Calendar's new-event page already filled in (title,
+  times with `ctz`, place, notes, and the repeat rule); you press Save in
+  Google, then **Link** it at your next fetch. Skipped or changed dates of a
+  series aren't carried over. **Not needed in Google** takes an event off the
+  list (it can be put back). The calendar itself never writes to Google. The
+  same link is on each local event's edit page.
+- **Title rules** (Import → Change): a word in a new Google event's title (any
+  capitals) sets its category and/or people, before the source's defaults,
+  for "Add ticked with defaults" and "Review and add". Example: "birthday" →
+  Birthday, for everyone. Events already imported aren't changed.
+- **Holidays** (Settings → Holidays): US holidays calculated by the server
+  (`app/holidays.py`; no internet needed): the federal holidays (ticked to
+  begin with) plus Easter, Mother's and Father's Day, Halloween, the clock
+  changes and others. Shown on the shelf like Info events, with nothing to
+  tap; never events. The display API's days gain a `holidays` list.
+
 ## Quick titles and Recently deleted (editor)
 
 - **Quick titles** (Settings → Quick titles): the one-tap titles on the

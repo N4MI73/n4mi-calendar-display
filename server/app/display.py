@@ -21,7 +21,7 @@ import math
 import sqlite3
 from datetime import date, datetime, time, timedelta
 
-from . import recurrence, store, timeutil
+from . import holidays, recurrence, store, timeutil
 
 API_VERSION = 1
 CACHE_EXTRA_DAYS = 7
@@ -98,6 +98,7 @@ def _day_json(d: date) -> dict:
         "month_short": d.strftime("%b"),
         "day": d.day,
         "events": [],
+        "holidays": [],      # Phase 5b (D59): names of the holidays on this day, if shown
     }
 
 
@@ -132,6 +133,9 @@ def build(conn: sqlite3.Connection, now: datetime) -> dict:
         else:
             # A timed event is listed on the day it starts (or today, if it began earlier and is still on).
             days[max(start, today)]["events"].append(dict(item, day_index=1, day_count=1, until=""))
+
+    for hd, names in holidays.between(today, last, holidays.chosen(cfg)).items():
+        days[hd]["holidays"] = names
 
     reminders = [
         {"id": r["id"], "text": r["text"], "carry_over": bool(r["carry_over"]), "due": r["due_occ"]}

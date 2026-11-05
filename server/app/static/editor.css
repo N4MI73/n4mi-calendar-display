@@ -221,3 +221,6 @@ select.unit { width: auto; min-height: 44px; }
 .import-row { flex-wrap: wrap; align-items: flex-start; }
 .import-row > span, .import-row > label { flex: 1 1 18rem; min-width: 0; }
 .list-row .meta { overflow-wrap: anywhere; }
+
+/* Phase 5b: the holiday list lines up in columns. */
+.holiday-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 0.5rem 1rem; }

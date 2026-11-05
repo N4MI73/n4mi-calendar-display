@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}Holidays{% endblock %}
+{% block content %}
+<h1>Holidays</h1>
+<p class="hint">US holidays shown on the shelf, quietly, like Info events. They're worked out by the calendar itself (no internet needed) and are never events: no reminders, and nothing to move or delete.</p>
+<form method="post" action="/holidays" class="form">
+  <fieldset class="field">
+    <legend>Show holidays</legend>
+    <div class="choices">
+      <label class="choice"><input type="radio" name="on" value="1" {% if on %}checked{% endif %}> Yes</label>
+      <label class="choice"><input type="radio" name="on" value="0" {% if not on %}checked{% endif %}> No</label>
+    </div>
+  </fieldset>
+  <fieldset class="field">
+    <legend>Which ones (dates shown for {{ year }})</legend>
+    <div class="choices holiday-list">
+    {% for h in rows %}
+      <label class="choice"><input type="checkbox" name="holiday" value="{{ h.key }}" {% if h.picked %}checked{% endif %}> {{ h.name }} <span class="meta">· {{ h.date }}{% if h.federal %} · federal{% endif %}</span></label>
+    {% endfor %}
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn btn-primary" type="submit">Save</button> <a class="btn btn-quiet" href="/settings">Cancel</a></div>
+</form>
+{% endblock %}

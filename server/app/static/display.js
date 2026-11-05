@@ -433,6 +433,25 @@
     return tappable(row, ev);
   }
 
+  // Holidays (Phase 5b, D59): quiet reference lines, like Info events, with nothing to tap.
+  function holidayRow(name) {
+    var row = el("div", "row allday info holiday");
+    row.appendChild(el("div", "time", "Holiday"));
+    var what = el("div", "what");
+    what.appendChild(el("div", "title", name));
+    row.appendChild(what);
+    return row;
+  }
+
+  function holidayItem(name) {
+    var item = el("div", "item info holiday");
+    var line = el("div", "line");
+    line.appendChild(el("span", "t", "Holiday"));
+    line.appendChild(document.createTextNode(name));
+    item.appendChild(line);
+    return item;
+  }
+
   function nextEventAfterToday(n, list) {
     var todayKey = ymd(n);
     for (var i = 0; i < list.length; i++) {
@@ -446,6 +465,8 @@
     var box = $("today");
     box.textContent = "";
     var events = today.events;
+    var hols = today.holidays || [];
+    hols.forEach(function (h) { box.appendChild(holidayRow(h)); });
 
     if (!events.length) {
       var q = el("div", "quiet");
@@ -535,10 +556,11 @@
       if (off < 1 || off > range) return;
       // A multi-day event shows once, on its first day ("until Sat"); one already under way is in Today.
       var evs = day.events.filter(function (ev) { return !(ev.all_day && ev.day_index > 1); });
-      if (!evs.length) return;
+      var hols = day.holidays || [];
+      if (!evs.length && !hols.length) return;
       var label = (off === 1 ? "Tomorrow · " + DAYS[d.getDay()].slice(0, 3) + ", " : DAYS[d.getDay()] + " · ")
         + MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate();
-      groups.push({ label: label, events: evs });
+      groups.push({ label: label, events: evs, holidays: hols });
     });
     // Rebuild only when something changed, so a scroll in progress isn't lost (D48).
     var sig = JSON.stringify(groups) + rangeWords;
@@ -555,6 +577,7 @@
     groups.forEach(function (g) {
       var day = el("div", "day");
       day.appendChild(el("div", "day-name", g.label));
+      g.holidays.forEach(function (h) { day.appendChild(holidayItem(h)); });
       g.events.forEach(function (ev) { day.appendChild(comingItem(ev)); });
       box.appendChild(day);
     });

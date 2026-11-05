@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set active = 'import' %}
+{% block title %}Not in Google{% endblock %}
+{% block content %}
+<h1>Not in Google</h1>
+{% if not last %}
+<p class="empty">Fetch from Google at least once first (Import page): until then, the calendar can't tell what's missing from Google.</p>
+{% else %}
+<p class="hint">Events here from today to 12 months ahead that aren't in your Google calendar, as of the last fetch ({{ fmt_deleted(last) }}). <strong>Add to Google</strong> opens Google Calendar with the event filled in: check it there and press Save. At your next fetch it appears under “Already here?”; choose <strong>Link</strong> and it leaves this list.</p>
+<ul class="list">
+{% for it in items %}
+  <li class="list-row import-row">
+    <span><span class="title">{{ it.title }}</span><br><span class="meta">{{ it.when }}</span>
+    {% if it.repeats %}<br><span class="meta">Repeats: check the repeat in Google before saving. Skipped or changed dates aren't carried over.</span>{% endif %}</span>
+    <a class="btn btn-primary btn-small" href="{{ it.url }}" target="_blank" rel="noopener">Add to Google</a>
+    <form method="post" action="/events/{{ it.id }}/not-needed" class="inline"><button class="btn btn-quiet btn-small" type="submit">Not needed in Google</button></form>
+  </li>
+{% else %}
+  <li class="empty">Everything here is also in Google.</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% if dismissed %}
+<h2>Marked “not needed in Google”</h2>
+<ul class="list">
+{% for ev in dismissed %}
+  <li class="list-row">
+    <span class="title">{{ ev.title }}</span>
+    <form method="post" action="/events/{{ ev.id }}/flag-again" class="inline"><button class="btn btn-quiet btn-small" type="submit">Put back on the list</button></form>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+<p class="subnav"><a href="/import">Back to Import</a></p>
+{% endblock %}

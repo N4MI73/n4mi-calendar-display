@@ -31,4 +31,44 @@
     <a class="btn btn-quiet" href="/import">Cancel</a>
   </div>
 </form>
+
+<h2>Title rules</h2>
+<p class="hint">For new events from this calendar whose title contains a word: use these people and category instead of the defaults above. Capitals don't matter. Applies to “Add ticked with defaults” and pre-fills “Review and add”; events already imported aren't changed. The first matching rule wins.</p>
+<ul class="list">
+{% for r in rules %}
+  <li class="list-row">
+    <span class="title">“{{ r.word }}”</span>
+    <span class="meta">→ {% if r.category_name %}{{ r.category_name }}{% else %}default category{% endif %} · {% set pn = (people | selectattr('id', 'in', r.people_ids) | map(attribute='name') | list) %}{% if pn %}{{ pn|join(', ') }}{% else %}default people{% endif %}</span>
+    <form method="post" action="/import/rules/{{ r.id }}/delete" class="inline"><button class="btn btn-quiet btn-small" type="submit">Remove</button></form>
+  </li>
+{% else %}
+  <li class="empty">No rules yet. Example: “birthday” → Birthday, for everyone.</li>
+{% endfor %}
+</ul>
+<form method="post" action="/import/sources/{{ slot }}/rules" class="form compact" novalidate>
+  <div class="row">
+    <div class="field grow {% if rule_errors.word %}has-error{% endif %}">
+      <label for="word">Title contains</label>
+      <input id="word" name="word" type="text" maxlength="60" value="{{ rule.word }}">
+      {% if rule_errors.word %}<p class="err">{{ rule_errors.word }}</p>{% endif %}
+    </div>
+    <div class="field {% if rule_errors.category %}has-error{% endif %}">
+      <label for="rule_category">Category</label>
+      <select id="rule_category" name="category_id">
+        <option value="">Keep the default</option>
+        {% for k in categories %}<option value="{{ k.id }}" {% if rule.category_id|string == k.id|string %}selected{% endif %}>{{ k.name }}</option>{% endfor %}
+      </select>
+      {% if rule_errors.category %}<p class="err">{{ rule_errors.category }}</p>{% endif %}
+    </div>
+  </div>
+  <fieldset class="field">
+    <legend>People (none ticked: keep the default)</legend>
+    <div class="choices">
+    {% for p in people %}
+      <label class="choice"><input type="checkbox" name="people" value="{{ p.id }}" {% if p.id in rule.people_ids %}checked{% endif %}> <span class="pill person" style="--c: {{ p.color }}">{{ p.name }}</span></label>
+    {% endfor %}
+    </div>
+  </fieldset>
+  <div class="actions"><button class="btn" type="submit">Add rule</button></div>
+</form>
 {% endblock %}

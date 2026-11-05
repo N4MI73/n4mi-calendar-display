@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
     "dark_start": "23:00",
     "dark_end": "06:00",
     "wake_seconds": "120",
+    "holidays_on": "1",          # Phase 5b: US holidays shown (D59); which ones: key "holidays"
 }
 
 # Suggested colors for new people, in order; the first one not yet used is offered.
@@ -1158,8 +1159,9 @@ def list_recently_deleted(conn: sqlite3.Connection, now: datetime | None = None)
 _EVENT_COPY_COLS = (
     "title", "location", "notes", "all_day", "start_local", "end_local", "category_id", "reminder_mode",
     "reminder_minutes", "rrule", "recurrence_end", "source", "google_source", "google_uid", "google_last_seen",
-    "locally_modified", "created", "updated", "added_on_shelf", "google_snapshot",
+    "locally_modified", "created", "updated", "added_on_shelf", "google_snapshot", "not_needed_in_google",
 )
+_FLAG_COLS = ("added_on_shelf", "not_needed_in_google")   # older snapshots may lack these: 0
 
 
 def restore_deleted(conn: sqlite3.Connection, entry_id: int, now: datetime | None = None) -> str:
@@ -1182,7 +1184,7 @@ def restore_deleted(conn: sqlite3.Connection, entry_id: int, now: datetime | Non
             cols = ", ".join(_EVENT_COPY_COLS)
             cur = conn.execute(
                 f"INSERT INTO events ({cols}) VALUES ({','.join('?' * len(_EVENT_COPY_COLS))})",
-                tuple(row.get(c) for c in _EVENT_COPY_COLS),
+                tuple(row.get(c, 0) if c in _FLAG_COLS else row.get(c) for c in _EVENT_COPY_COLS),
             )
             new_id = cur.lastrowid
             conn.executemany("INSERT INTO event_people (event_id, person_id) VALUES (?, ?)",
@@ -1399,3 +1401,17 @@ def suggest_quick_titles(conn: sqlite3.Connection, limit: int = 15) -> list[dict
         (limit,),
     )
     return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------- holidays (D59)
+
+
+def save_holidays(conn: sqlite3.Connection, on: bool, keys: list[str]) -> None:
+    from . import holidays
+    picked = set(keys)
+    chosen = [k for k in holidays.HOLIDAYS if k in picked]
+    conn.executemany(
+        "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [("holidays_on", "1" if on else "0"), ("holidays", ",".join(chosen))],
+    )
+    conn.commit()

@@ -33,8 +33,10 @@ import.
 - **Phase 5a:** read-only import from a Google calendar's private iCal
   address, with a review page (new, already here, changed, removed) where
   nothing changes until the owner chooses.
-- **Next:** "Not in Google" and US holidays (Phase 5b), then hardening the Pi
-  as an unattended appliance.
+- **Phase 5b:** a "Not in Google" list with a pre-filled Add to Google link
+  (the calendar itself never writes to Google), title rules for imports, and
+  US holidays calculated on the server.
+- **Next:** hardening the Pi as an unattended appliance, with a health button.
 
 ## Privacy
 

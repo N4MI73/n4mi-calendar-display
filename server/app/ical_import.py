@@ -41,8 +41,12 @@ def fetch(url: str, timeout: int = FETCH_TIMEOUT) -> bytes:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read(MAX_BYTES + 1)
     except urllib.error.HTTPError as exc:
-        hint = " (the address may have been reset in Google)" if exc.code in (401, 403, 404) else ""
-        raise FetchError(f"Google answered HTTP {exc.code}{hint}.") from None
+        if exc.code in (401, 403, 404):
+            raise FetchError(
+                f"Google refused the address (HTTP {exc.code}). Check that the calendar's secret address "
+                "was copied, not its public one. If the secret address was reset in Google, copy the new one "
+                "into Portainer.") from None
+        raise FetchError(f"Google answered HTTP {exc.code}.") from None
     except urllib.error.URLError as exc:
         raise FetchError(f"Couldn't connect ({type(exc.reason).__name__}).") from None
     except TimeoutError:

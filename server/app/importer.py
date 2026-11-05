@@ -104,6 +104,68 @@ def save_source(conn: sqlite3.Connection, slot: int, name: str, person_ids: list
     conn.commit()
 
 
+# ------------------------------------------------------ title rules (D60)
+
+
+def list_rules(conn: sqlite3.Connection, slot: int | None = None) -> list[dict]:
+    sql = ("SELECT r.*, c.name AS category_name, c.color AS category_color FROM import_rules r"
+           " LEFT JOIN categories c ON c.id = r.category_id" + (" WHERE r.slot = ?" if slot else "") + " ORDER BY r.id")
+    out = []
+    for row in conn.execute(sql, (slot,) if slot else ()):
+        r = dict(row)
+        r["people_ids"] = json.loads(r["people"] or "[]")
+        out.append(r)
+    return out
+
+
+def save_rule(conn: sqlite3.Connection, slot: int, word: str, category_id, person_ids: list) -> int:
+    errors = {}
+    word = (word or "").strip()
+    if not word:
+        errors["word"] = "Enter a word or phrase to look for in the title."
+    elif len(word) > 60:
+        errors["word"] = "Keep it to 60 characters or fewer."
+    cat = None
+    if category_id not in (None, ""):
+        try:
+            cat = int(category_id)
+        except (TypeError, ValueError):
+            cat = -1
+        if store.get_category(conn, cat) is None:
+            errors["category"] = "That category no longer exists."
+    people = sorted({int(p) for p in (person_ids or []) if str(p).isdigit() and store.get_person(conn, int(p))})
+    if not errors and cat is None and not people:
+        errors["word"] = "Choose a category, people, or both for this rule."
+    if errors:
+        raise store.ValidationError(errors)
+    cur = conn.execute("INSERT INTO import_rules (slot, word, category_id, people, created) VALUES (?,?,?,?,?)",
+                       (slot, word, cat, json.dumps(people), _now()))
+    conn.commit()
+    return cur.lastrowid
+
+
+def delete_rule(conn: sqlite3.Connection, rule_id: int) -> None:
+    conn.execute("DELETE FROM import_rules WHERE id = ?", (rule_id,))
+    conn.commit()
+
+
+def defaults_for(conn: sqlite3.Connection, slot: int, title: str) -> tuple[list[int], int | None]:
+    """People and category for a new Google event: the first matching title rule, then the source's defaults."""
+    src = get_source(conn, slot) or {"people_ids": [], "default_category_id": None}
+    people = [p for p in src["people_ids"] if store.get_person(conn, p)]
+    cat = src["default_category_id"]
+    low = (title or "").lower()
+    for r in list_rules(conn, slot):
+        if r["word"].lower() in low:
+            rule_people = [p for p in r["people_ids"] if store.get_person(conn, p)]
+            if rule_people:
+                people = rule_people
+            if r["category_id"]:
+                cat = r["category_id"]
+            break
+    return people, cat
+
+
 # --------------------------------------------------------------- versions
 
 
@@ -378,12 +440,11 @@ def add_with_defaults(conn: sqlite3.Connection, item_ids: list[int]) -> int:
             it = get_item(conn, iid)
             if not it or it["kind"] != "new":
                 continue
-            src = get_source(conn, it["slot"])
-            people = [p for p in (src["people_ids"] if src else []) if store.get_person(conn, p)]
-            if not people or not (src and src["default_category_id"]):
-                raise ImportError_("Set this source's default people and category first (Import sources), "
-                                   "or use “Review and add” for each event.")
-            _create(conn, it["slot"], it["g"], people, src["default_category_id"])
+            people, cat = defaults_for(conn, it["slot"], it["g"]["title"])
+            if not people or not cat:
+                raise ImportError_(f"“{it['g']['title']}” has no default people or category. Set the source's "
+                                   "defaults (Import → Change), or use “Review and add” for it.")
+            _create(conn, it["slot"], it["g"], people, cat)
             _drop(conn, iid)
             added += 1
         conn.commit()
@@ -396,7 +457,7 @@ def add_with_defaults(conn: sqlite3.Connection, item_ids: list[int]) -> int:
 def form_for_item(conn: sqlite3.Connection, it: dict) -> store.EventInput:
     """The event form pre-filled from a Google event and the source's defaults (D34)."""
     g = it["g"]
-    src = get_source(conn, it["slot"]) or {"people_ids": [], "default_category_id": None}
+    people, cat = defaults_for(conn, it["slot"], g["title"])
     start = timeutil.parse_local(g["start_local"])
     end = timeutil.parse_local(g["end_local"])
     p = recurrence.pattern_from_rrule(g["rrule"], g["recurrence_end"], start.date())
@@ -404,7 +465,7 @@ def form_for_item(conn: sqlite3.Connection, it: dict) -> store.EventInput:
         title=g["title"], location=g["location"], notes=g["notes"], all_day=g["all_day"],
         start_date=start.strftime(timeutil.DATE_FMT), start_time="" if g["all_day"] else start.strftime("%H:%M"),
         end_date=end.strftime(timeutil.DATE_FMT), end_time="" if g["all_day"] else end.strftime("%H:%M"),
-        category_id=str(src["default_category_id"] or ""), person_ids=[str(x) for x in src["people_ids"]],
+        category_id=str(cat or ""), person_ids=[str(x) for x in people],
         repeat=p.repeat, interval=p.interval, weekdays=p.weekdays, ordinals=p.ordinals,
         nth_weekday=p.nth_weekday, until=p.until, custom_rrule=p.custom_rrule,
     )

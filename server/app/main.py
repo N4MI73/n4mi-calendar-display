@@ -23,9 +23,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, display, ical_import, importer, recurrence, store, timeutil
+from . import db, display, google_links, holidays, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.5.1"
 BASE_DIR = Path(__file__).parent
 
 
@@ -308,7 +308,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return rows
 
     def _event_form_page(request, c, form: store.EventInput, event_id=None, errors=None, status=200,
-                         future=None, dropped=None, shelf_added=False):
+                         future=None, dropped=None, shelf_added=False, google_url=None):
         """future: an occurrence date when changing "this and all later dates" (D46)."""
         return render(
             request,
@@ -325,6 +325,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             dropped=[_date_label(x["occ_date"]) + (" (skipped)" if x["skipped"] else " (changed)")
                      for x in (dropped or [])],
             shelf_added=shelf_added,
+            google_url=google_url,
         )
 
     def _form_to_input(form) -> store.EventInput:
@@ -398,8 +399,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
             event = store.get_event(c, event_id)
             if not event:
                 return redirect("/", "That event no longer exists.")
+            gurl = None if event.get("google_uid") else google_links.add_to_google_url(event)
             return _event_form_page(request, c, store.event_to_input(event), event_id=event_id,
-                                    shelf_added=bool(event.get("added_on_shelf")))
+                                    shelf_added=bool(event.get("added_on_shelf")), google_url=gurl)
         finally:
             c.close()
 
@@ -908,6 +910,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             c.close()
         return render(request, "import.html", sources=sources, skipped_count=skipped)
 
+
     @app.post("/import/{slot}/fetch")
     def import_fetch(slot: int):
         if slot not in importer.configured_slots():
@@ -1051,7 +1054,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
             form = {"name": src["name"], "people_ids": src["people_ids"],
                     "category_id": src["default_category_id"] or ""}
             return render(request, "import_source.html", slot=slot, form=form, errors={},
-                          people=store.list_people(c), categories=store.list_categories(c))
+                          people=store.list_people(c), categories=store.list_categories(c),
+                          rules=importer.list_rules(c, slot), rule={"word": "", "category_id": "", "people_ids": []},
+                          rule_errors={})
         finally:
             c.close()
 
@@ -1068,10 +1073,107 @@ def create_app(db_path: str | None = None) -> FastAPI:
                 form = {"name": f.get("name", ""), "people_ids": [int(x) for x in f.getlist("people") if x.isdigit()],
                         "category_id": f.get("category_id", "")}
                 return render(request, "import_source.html", status_code=400, slot=slot, form=form,
-                              errors=exc.errors, people=store.list_people(c), categories=store.list_categories(c))
+                              errors=exc.errors, people=store.list_people(c), categories=store.list_categories(c),
+                              rules=importer.list_rules(c, slot),
+                              rule={"word": "", "category_id": "", "people_ids": []}, rule_errors={})
         finally:
             c.close()
         return redirect("/import", "Saved.")
+
+    @app.post("/import/sources/{slot}/rules", response_class=HTMLResponse)
+    async def import_rule_add(request: Request, slot: int):
+        f = await request.form()
+        c = conn()
+        try:
+            src = importer.get_source(c, slot)
+            if not src:
+                return redirect("/import", "That source isn't set up.")
+            try:
+                importer.save_rule(c, slot, f.get("word", ""), f.get("category_id", ""), f.getlist("people"))
+            except store.ValidationError as exc:
+                form = {"name": src["name"], "people_ids": src["people_ids"],
+                        "category_id": src["default_category_id"] or ""}
+                rule = {"word": f.get("word", ""), "category_id": f.get("category_id", ""),
+                        "people_ids": [int(x) for x in f.getlist("people") if x.isdigit()]}
+                return render(request, "import_source.html", status_code=400, slot=slot, form=form, errors={},
+                              people=store.list_people(c), categories=store.list_categories(c),
+                              rules=importer.list_rules(c, slot), rule=rule, rule_errors=exc.errors)
+        finally:
+            c.close()
+        return redirect(f"/import/sources/{slot}", "Rule added. It applies to new events from the next review on.")
+
+    @app.post("/import/rules/{rule_id}/delete")
+    def import_rule_delete(rule_id: int):
+        c = conn()
+        try:
+            row = c.execute("SELECT slot FROM import_rules WHERE id = ?", (rule_id,)).fetchone()
+            importer.delete_rule(c, rule_id)
+        finally:
+            c.close()
+        return redirect(f"/import/sources/{row[0]}" if row else "/import", "Rule removed.")
+
+    # -------------------------------------------- Not in Google (Phase 5b)
+
+    @app.get("/import/not-in-google", response_class=HTMLResponse)
+    def not_in_google_page(request: Request):
+        c = conn()
+        try:
+            last = google_links.last_fetch(c)
+            items = []
+            if last:
+                for x in google_links.not_in_google(c, timeutil.now_local().date()):
+                    ev = x["event"]
+                    items.append({"id": ev["id"], "title": ev["title"], "when": _local_when(x["next"]),
+                                  "url": google_links.add_to_google_url(ev), "repeats": bool(ev["rrule"])})
+            dismissed = google_links.list_not_needed(c)
+        finally:
+            c.close()
+        return render(request, "not_in_google.html", items=items, last=last, dismissed=dismissed)
+
+    @app.post("/events/{event_id}/not-needed")
+    def event_not_needed(event_id: int):
+        c = conn()
+        try:
+            google_links.set_not_needed(c, event_id, True)
+        finally:
+            c.close()
+        return redirect("/import/not-in-google", "Taken off the list. It won't be flagged again.")
+
+    @app.post("/events/{event_id}/flag-again")
+    def event_flag_again(event_id: int):
+        c = conn()
+        try:
+            google_links.set_not_needed(c, event_id, False)
+        finally:
+            c.close()
+        return redirect("/import/not-in-google", "It's back on the list.")
+
+    # ------------------------------------------------- holidays (D59)
+
+    @app.get("/holidays", response_class=HTMLResponse)
+    def holidays_page(request: Request):
+        c = conn()
+        try:
+            cfg = store.get_config(c)
+        finally:
+            c.close()
+        on = cfg.get("holidays_on", "1") == "1"
+        picked = set(holidays.chosen(dict(cfg, holidays_on="1")))
+        year = timeutil.now_local().year
+        rows = [{"key": k, "name": name, "federal": fed, "picked": k in picked,
+                 "date": holidays.date_of(k, year).strftime("%a, %b %d").replace(" 0", " ")}
+                for k, (name, fed, _) in holidays.HOLIDAYS.items()]
+        return render(request, "holidays.html", on=on, rows=rows, year=year)
+
+    @app.post("/holidays")
+    async def holidays_save(request: Request):
+        f = await request.form()
+        c = conn()
+        try:
+            store.save_holidays(c, f.get("on") == "1", f.getlist("holiday"))
+        finally:
+            c.close()
+        return redirect("/holidays", "Saved. The shelf shows the change within a minute.")
 
     @app.get("/import/skipped", response_class=HTMLResponse)
     def import_skipped(request: Request):
