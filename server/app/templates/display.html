@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/static/display.css?v={{ app_version }}">
 </head>
 <body>
-<!-- N4MI Calendar Display: the shelf screen (Phases 3 and 4). Everything here is served
+<!-- N4MI Calendar Display: the shelf screen (Phases 3, 4 and 6). Everything here is served
      by the calendar server; nothing is loaded from the internet. The page reads
      /api/v1/display, keeps the last good copy in the browser, and shows it with
      a "Not updated since" bar when the server can't be reached. -->
@@ -26,7 +26,12 @@
 
   <header class="head">
     <div id="date" class="head-date"></div>
-    <div id="clock" class="head-clock"></div>
+    <div id="title" class="head-title"></div>
+    <div class="head-right">
+      <div id="clock" class="head-clock"></div>
+      <!-- Phase 6a (D61): the health button; colour always with a symbol and a word. -->
+      <button type="button" id="health-btn" class="hbtn" hidden></button>
+    </div>
   </header>
 
   <main class="panels">

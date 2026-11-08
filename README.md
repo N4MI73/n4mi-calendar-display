@@ -36,7 +36,12 @@ import.
 - **Phase 5b:** a "Not in Google" list with a pre-filled Add to Google link
   (the calendar itself never writes to Google), title rules for imports, and
   US holidays calculated on the server.
-- **Next:** hardening the Pi as an unattended appliance, with a health button.
+- **Phase 6a:** a health button on the shelf display (green / amber / red,
+  always with a symbol and a word) with a panel of the Pi's vital signs and a
+  confirmed Restart and Shut down; a Health page in the editor; and a title in
+  the display's top bar.
+- **Next (6b, 6c):** the Pi helper (health reports, kiosk autostart, screen
+  off at night), then the read-only overlay and power-pull tests.
 
 ## Privacy
 

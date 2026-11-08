@@ -153,6 +153,7 @@ def build(conn: sqlite3.Connection, now: datetime) -> dict:
             "dark_end": cfg["dark_end"],
             "wake_seconds": _int(cfg["wake_seconds"], 120),
         },
+        "title": cfg.get("display_title", ""),   # Phase 6a (D65): empty hides it
         "days": [days[k] for k in sorted(days)],
         "reminders": reminders,
         # Phase 4: choices for the Add form (D48, D49).

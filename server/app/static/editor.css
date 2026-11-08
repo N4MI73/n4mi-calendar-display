@@ -224,3 +224,16 @@ select.unit { width: auto; min-height: 44px; }
 
 /* Phase 5b: the holiday list lines up in columns. */
 .holiday-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 0.5rem 1rem; }
+
+/* ---------- Health page (Phase 6a, D61): colour always with a word ---------- */
+.health-head { display: flex; align-items: center; gap: 0.9rem; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 0.9rem 1rem; margin: 0 0 1rem; }
+.health-title { font-size: 1.2rem; font-weight: 700; }
+.health-label { min-width: 9rem; }
+.health-badge { display: inline-flex; align-items: center; padding: 0.1rem 0.7rem; border-radius: 999px; font-size: 0.9rem;
+  font-weight: 700; white-space: nowrap; }
+.health-badge.lv-ok { background: #3FB950; color: #0E1116; }
+.health-badge.lv-check { background: #F5A524; color: #0E1116; }
+.health-badge.lv-alert { background: #FF6B6B; color: #0E1116; }
+.health-badge.lv-none { background: #3A4252; color: #E3E6EB; }
+code { font-size: 0.85rem; overflow-wrap: anywhere; }

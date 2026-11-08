@@ -34,6 +34,16 @@ DEFAULT_CONFIG = {
     "dark_end": "06:00",
     "wake_seconds": "120",
     "holidays_on": "1",          # Phase 5b: US holidays shown (D59); which ones: key "holidays"
+    "display_title": "Family Calendar",   # Phase 6a (D65): centred in the shelf's top bar; empty hides it
+    # Phase 6a (D61): health thresholds, edited on the Health page, and the name in "Tell …".
+    "health_temp_check": "70",
+    "health_temp_alert": "80",
+    "health_disk_check": "15",
+    "health_disk_alert": "5",
+    "health_contact_check": "5",
+    "health_contact_alert": "30",
+    "health_clock_check": "60",
+    "health_tell": "",
 }
 
 # Suggested colors for new people, in order; the first one not yet used is offered.
@@ -1087,6 +1097,12 @@ def save_config(conn: sqlite3.Connection, form: dict[str, str]) -> dict[str, str
             clean[key] = raw
         else:
             errors[key] = "Enter a time such as 23:00."
+    if "display_title" in form:
+        title = _clean(form.get("display_title"))
+        if len(title) > 40:
+            errors["display_title"] = "Keep it to 40 characters or fewer."
+        else:
+            clean["display_title"] = title
     if errors:
         raise ValidationError(errors)
     conn.executemany(

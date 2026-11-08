@@ -23,9 +23,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import db, display, google_links, holidays, ical_import, importer, recurrence, store, timeutil
+from . import db, display, google_links, health, holidays, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.6.0"
 BASE_DIR = Path(__file__).parent
 
 
@@ -80,6 +80,11 @@ def _fmt_when(value) -> str:
     if dt.year != timeutil.now_local().year:
         text += f", {dt.year}"
     return text + ", " + timeutil.fmt_time(dt)
+
+
+def _now_seconds() -> datetime:
+    """Local wall-clock time to the second (health ages are shown in seconds)."""
+    return datetime.now(timeutil.TZ).replace(tzinfo=None, microsecond=0)
 
 
 def _date_label(d: str) -> str:
@@ -170,10 +175,64 @@ def create_app(db_path: str | None = None) -> FastAPI:
         c = conn()
         try:
             data = display.build(c, moment)
+            real = _now_seconds()
+            if now is None:              # the real display, not a test clock
+                health.mark_display_seen(c, real)
+            data["health"] = _health_for_display(health.evaluate(c, real, APP_VERSION))
         finally:
             c.close()
         data["app_version"] = APP_VERSION
         return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+    def _health_for_display(h: dict) -> dict:
+        return {k: h[k] for k in ("level", "label", "head", "sub", "rows", "versions", "set_up")}
+
+    # ------------------------------------------------ health (Phase 6a, D61)
+
+    @app.post("/api/v{version:int}/device/report")
+    async def api_device_report(version: int, request: Request):
+        """The Pi helper's readings, every 30 s. The reply carries dark hours and any waiting command."""
+        if version != display.API_VERSION:
+            return _unsupported(version)
+        body = await _body(request)
+        if body is None:
+            return _api_error(400, "bad_json")
+        real = _now_seconds()
+        c = conn()
+        try:
+            health.report(c, body, real)
+            cmd = health.take_command(c, real)
+            cfg = store.get_config(c)
+        finally:
+            c.close()
+        return JSONResponse({
+            "ok": True,
+            "config": {"dark_start": cfg["dark_start"], "dark_end": cfg["dark_end"],
+                       "wake_seconds": int(cfg["wake_seconds"])},
+            "command": cmd,
+            "app_version": APP_VERSION,
+        }, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v{version:int}/device/command")
+    async def api_device_command(version: int, request: Request):
+        """Restart or Shut down, from the health panel. Picked up by the Pi helper's next report."""
+        if version != display.API_VERSION:
+            return _unsupported(version)
+        body = await _body(request)
+        if body is None:
+            return _api_error(400, "bad_json")
+        action = str(body.get("action", ""))
+        if action not in health.ACTIONS:
+            return _api_error(400, "unknown_action")
+        real = _now_seconds()
+        c = conn()
+        try:
+            if health.state(c)["received"] is None:
+                return _api_error(409, "not_set_up")
+            cmd_id = health.request_command(c, action, real)
+        finally:
+            c.close()
+        return {"ok": True, "id": cmd_id, "action": action}
 
     @app.post("/api/v{version:int}/reminders/{reminder_id}/{action}")
     def api_reminder(version: int, reminder_id: int, action: str, now: str | None = None):
@@ -1313,6 +1372,38 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         return redirect("/recently-deleted", message)
+
+    # ------------------------------------------------------------ health page
+
+    def _health_page(request, form=None, errors=None, status=200):
+        c = conn()
+        try:
+            cfg = store.get_config(c)
+            h = health.evaluate(c, _now_seconds(), APP_VERSION)
+            seen = health.state(c)["display_seen"]
+            commands = health.last_commands(c)
+        finally:
+            c.close()
+        values = form if form is not None else cfg
+        return render(request, "health.html", status_code=status, h=h, values=values, errors=errors or {},
+                      threshold_keys=health.THRESHOLD_KEYS, display_seen=seen, commands=commands)
+
+    @app.get("/health", response_class=HTMLResponse)
+    def health_page(request: Request):
+        return _health_page(request)
+
+    @app.post("/health", response_class=HTMLResponse)
+    async def health_save(request: Request):
+        f = await request.form()
+        form = {k: f.get(k, "") for k in list(health.THRESHOLD_KEYS) + ["health_tell"]}
+        c = conn()
+        try:
+            health.save_settings(c, form)
+        except store.ValidationError as exc:
+            return _health_page(request, form, exc.errors, status=400)
+        finally:
+            c.close()
+        return redirect("/health", "Saved.")
 
     # ------------------------------------------------------------ settings
 

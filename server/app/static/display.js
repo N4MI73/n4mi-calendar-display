@@ -188,7 +188,14 @@
     back: ["M21 5H9l-6 7 6 7h12z", "M17 9l-5 6", "M12 9l5 6"],
     tick: ["M5 12.5l4.5 4.5L19 7.5"],
     left: ["M15 5l-7 7 7 7"],
-    right: ["M9 5l7 7-7 7"]
+    right: ["M9 5l7 7-7 7"],
+    // Phase 6a: health levels, Restart, Shut down.
+    ok: ["M5 12.5l4.5 4.5L19 7.5"],
+    check: ["M12 4l9 16H3z", "M12 10v4", "M12 17.5v.5"],
+    alert: ["M8 3h8l5 5v8l-5 5H8l-5-5V8z", "M9 9l6 6", "M15 9l-6 6"],
+    none: ["M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18", "M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4", "M12 17.5v.5"],
+    restart: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7"],
+    power: ["M12 3v9", "M6.3 7.5a8 8 0 1 0 11.4 0"]
   };
 
   function icon(name) {
@@ -312,9 +319,12 @@
     var list = data.days;
     $("add-btn").classList.toggle("dim", !current);
 
-    // Header.
+    // Header: date, title (D65), clock and the health button (D61).
     $("date").textContent = DAYS[n.getDay()] + ", " + MONTHS[n.getMonth()] + " " + n.getDate();
+    $("title").textContent = data.title || "";
     $("clock").textContent = clock(n);
+    drawHealthButton(healthView(n));
+    if (ui && ui.mode === "health" && !ui.busy) drawSheet();
 
     // Banner.
     var b = pickBanner(n, list);
@@ -675,7 +685,8 @@
     var sh = $("sheet");
     sh.textContent = "";
     if (!ui) { sh.hidden = true; return; }
-    var card = ({ details: drawDetails, delete: drawDelete, move: drawMove, add1: drawAddWhat, add2: drawAddWhen })[ui.mode]();
+    var card = ({ details: drawDetails, delete: drawDelete, move: drawMove, add1: drawAddWhat, add2: drawAddWhen,
+                  health: drawHealth, restart: drawDeviceConfirm, shutdown: drawDeviceConfirm })[ui.mode]();
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-modal", "true");
     sh.appendChild(card);
@@ -1058,6 +1069,113 @@
     send("/api/v1/events", body, "Added " + body.title + " on " + chosenText());
   }
 
+  // ------------------------------------------------- health (Phase 6a, D61)
+  //
+  // The server works out the levels from the Pi's reports. When the server
+  // can't be reached the page decides for itself: Check after a few minutes,
+  // Alert once the schedule is stale, in step with the "Not updated" bar.
+
+  var HEALTH_WORDS = { none: "Not set up", ok: "OK", check: "Check", alert: "Alert" };
+  var OFFLINE_CHECK_MIN = 5;
+
+  function healthView(n) {
+    if (!data || !data.health) return null;
+    var h = data.health;
+    var ageMin = lastOk ? (n.getTime() - lastOk) / 60000 : Infinity;
+    if (ageMin <= OFFLINE_CHECK_MIN) return h;
+    var at = new Date(lastOk);
+    var when = daysBetween(at, n) === 0 ? clock(at) : DAYS[at.getDay()].slice(0, 3) + " " + clock(at);
+    var level = isCurrent(n) ? "check" : "alert";
+    return { level: level, label: HEALTH_WORDS[level], head: "Can't reach the calendar",
+             sub: "Last heard from it at " + when + ". The readings below are from then.",
+             rows: h.rows || [], versions: h.versions || "", set_up: h.set_up, offline: true };
+  }
+
+  function drawHealthButton(h) {
+    var btn = $("health-btn");
+    if (!h) { btn.hidden = true; return; }
+    btn.hidden = false;
+    btn.className = "hbtn lv-" + h.level;
+    btn.textContent = "";
+    btn.appendChild(icon(h.level));
+    btn.appendChild(document.createTextNode(h.label));
+    btn.setAttribute("aria-label", "Calendar health: " + h.label);
+  }
+
+  function lvChip(level) {
+    var c = el("span", "lvchip lv-" + level);
+    c.appendChild(icon(level));
+    c.appendChild(document.createTextNode(HEALTH_WORDS[level]));
+    return c;
+  }
+
+  function drawHealth() {
+    var h = healthView(now()) || { level: "none", label: "Not set up", head: "Not set up yet", sub: "", rows: [], versions: "" };
+    var card = el("div", "sheet health");
+    var head = el("div", "hhead");
+    var dot = el("span", "dot lv-" + h.level);
+    dot.appendChild(icon(h.level));
+    head.appendChild(dot);
+    var words = el("div");
+    words.appendChild(el("div", "t", h.head));
+    if (h.sub) words.appendChild(el("div", "s", h.sub));
+    head.appendChild(words);
+    card.appendChild(head);
+    var rows = el("div", "hrows");
+    (h.rows || []).forEach(function (r) {
+      var row = el("div", "hrow");
+      row.appendChild(el("div", "k", r.label));
+      row.appendChild(el("div", "v", r.value));
+      var right = el("div", "r");
+      if (r.note) right.appendChild(el("span", "n", r.note));
+      right.appendChild(lvChip(r.level));
+      row.appendChild(right);
+      rows.appendChild(row);
+    });
+    if (h.versions) {
+      var ver = el("div", "hrow ver");
+      ver.appendChild(el("div", "k", "Versions"));
+      ver.appendChild(el("div", "v", h.versions));
+      ver.appendChild(el("div", "r"));
+      rows.appendChild(ver);
+    }
+    card.appendChild(rows);
+    var able = canAct() && h.set_up && !h.offline;
+    if (!h.set_up) card.appendChild(el("div", "say small", "Restart and Shut down work once the Pi's health helper is set up."));
+    else if (!able) card.appendChild(offlineWarn("Can't reach the calendar right now, so Restart and Shut down can't be sent."));
+    var bar = el("div", "bar");
+    bar.appendChild(b("Restart", "b w", function () { openSheet({ mode: "restart" }); }, { icon: "restart", disabled: !able }));
+    bar.appendChild(b("Shut down", "b w dangerText", function () { openSheet({ mode: "shutdown" }); }, { icon: "power", disabled: !able }));
+    var aside = el("div", "aside");
+    aside.appendChild(document.createTextNode("More on the editor's Health page"));
+    aside.appendChild(el("br"));
+    aside.appendChild(document.createTextNode("Closes by itself after a minute"));
+    bar.appendChild(aside);
+    bar.appendChild(b("Close", "b w primary", closeSheet, { always: true }));
+    card.appendChild(bar);
+    return card;
+  }
+
+  function drawDeviceConfirm() {
+    var off = ui.mode === "shutdown";
+    var card = el("div", "sheet narrow");
+    card.appendChild(el("h3", null, off ? "Turn the calendar off?" : "Restart the calendar?"));
+    card.appendChild(el("div", "say", off
+      ? "It stays off until someone presses the button on the back of the Pi. Pulling the plug and plugging it back in also starts it."
+      : "The screen goes dark for about a minute, then the calendar comes back by itself."));
+    if (ui.error) card.appendChild(el("div", "err", ui.error));
+    // Cancel is first; the button that acts sits at the far right, away from it.
+    var bar = el("div", "bar");
+    bar.appendChild(b("Cancel", "b w primary", function () { openSheet({ mode: "health" }); }, { always: true }));
+    bar.appendChild(el("div", "fill"));
+    bar.appendChild(b(off ? "Turn off" : "Restart", "b go" + (off ? " off" : ""), function () {
+      send("/api/v1/device/command", { action: off ? "shutdown" : "restart" },
+           off ? "Turning off… press the button on the Pi to start it again." : "Restarting… back in about a minute.");
+    }, { icon: off ? "power" : "restart" }));
+    card.appendChild(bar);
+    return card;
+  }
+
   // ------------------------------------------------------------ sending
 
   function send(path, body, doneText) {
@@ -1081,7 +1199,9 @@
       }
       if (!ui) return;
       ui.busy = false;
-      if (r.status === 404) {
+      if (r.status === 409 && r.body && r.body.error === "not_set_up") {
+        ui.error = "The Pi's health helper isn't set up yet, so this can't work yet.";
+      } else if (r.status === 404) {
         ui.error = "This has changed since the screen last updated. Close this and try again.";
         refresh();
       } else {
@@ -1212,6 +1332,7 @@
   document.addEventListener("pointerdown", function () { lastTouch = Date.now(); }, true);
   $("sheet").addEventListener("click", onOverlayTap);
   $("add-btn").addEventListener("click", openAdd);
+  $("health-btn").addEventListener("click", function () { openSheet({ mode: "health" }); });
   $("top-btn").addEventListener("click", function () { $("coming").scrollTop = 0; updateComingMore(); });
   $("coming").addEventListener("scroll", function () { comingTouched = Date.now(); updateComingMore(); }, { passive: true });
 

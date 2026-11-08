@@ -129,7 +129,7 @@ pulls a finished image (`pull_policy: always`).
   itself.
 - Night mode: during dark hours the page is black; a tap wakes it for the wake
   time and never presses anything underneath. (Switching the monitor's
-  picture off comes with the Pi setup in Phase 6.)
+  picture off comes with the Pi helper in Phase 6b.)
 - `GET /api/v1/display[?now=…]` — today plus the Upcoming range plus 7 days:
   each day's events with labels already written ("2:30 PM", "day 2 of 4"),
   people and category, and `remind_at` (when the banner starts); the
@@ -212,6 +212,32 @@ pulls a finished image (`pull_policy: always`).
   begin with) plus Easter, Mother's and Father's Day, Halloween, the clock
   changes and others. Shown on the shelf like Info events, with nothing to
   tap; never events. The display API's days gain a `holidays` list.
+
+## Health, Restart / Shut down and the title (Phase 6a)
+
+- **Health button** on the shelf, beside the clock: OK (green), Check (amber),
+  Alert (red), or Not set up (grey) until the Pi has reported. Colour always
+  comes with a symbol and a word. Tapping it opens the Pi's vital signs in
+  plain words, with **Restart** and **Shut down**, each confirmed with the
+  acting button placed away from Cancel. When the display can't reach the
+  server, the page itself shows Check after 5 minutes and Alert once the
+  schedule is stale.
+- **Settings → Health** in the editor: every reading, when it arrived, recent
+  Restart / Shut down requests, the limits (temperature, free storage, no
+  contact, clock), and the name shown as "Tell …" on the shelf.
+- **Title:** Settings → "Title in the top bar" (default "Family Calendar";
+  empty hides it). The display API carries it as `title`.
+- `POST /api/v1/device/report` — the Pi helper's readings (JSON: `temp_c`,
+  `throttled`, `disk_free_pct`, `ssd_present`, `uptime_s`, `mem_avail_pct`,
+  `epoch`, `overlay`, `helper_version`, `os`, `hdmi`; unknown or out-of-range
+  values are ignored). The reply carries `config` (dark hours, wake time) and
+  `command` (`restart`, `shutdown` or null), each command delivered once.
+- `POST /api/v1/device/command` with `{"action": "restart" | "shutdown"}` —
+  from the health panel. One request waits at a time and expires after 5
+  minutes; 409 `not_set_up` until the Pi has reported.
+- The display payload gains `health` (`level`, `label`, `head`, `sub`, `rows`,
+  `versions`, `set_up`). The server notes when the real display last fetched
+  the schedule (not test-clock requests).
 
 ## Quick titles and Recently deleted (editor)
 

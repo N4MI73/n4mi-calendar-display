@@ -6,6 +6,12 @@
 {% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
 <form method="post" class="form" novalidate>
   <h2>Shelf display</h2>
+  <div class="field {% if errors.display_title %}has-error{% endif %}">
+    <label for="display_title">Title in the top bar</label>
+    <input id="display_title" name="display_title" type="text" maxlength="40" value="{{ cfg.display_title }}">
+    <p class="hint">Shown between the date and the clock. Leave empty to hide it.</p>
+    {% if errors.display_title %}<p class="err">{{ errors.display_title }}</p>{% endif %}
+  </div>
   <div class="field {% if errors.upcoming_days %}has-error{% endif %}">
     <label for="upcoming_days">"Coming up" shows this many days ahead</label>
     <input id="upcoming_days" name="upcoming_days" type="number" min="1" max="60" inputmode="numeric" value="{{ cfg.upcoming_days }}">
@@ -44,6 +50,7 @@
 
 <h2>More</h2>
 <ul class="plain-list">
+  <li><a href="/health">Health</a>: how the shelf display is doing, and the limits for its health button.</li>
   <li><a href="/quick-titles">Quick titles</a>: the one-tap titles on the shelf display's Add form.</li>
   <li><a href="/holidays">Holidays</a>: which US holidays the shelf shows.</li>
   <li><a href="/recently-deleted">Recently deleted</a>: put back an event deleted in the last few days.</li>

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}Health{% endblock %}
+{% block content %}
+<h1>Health</h1>
+<p class="hint">How the shelf display is doing. The Pi reports every 30 seconds; the shelf's health button shows the worst of these rows.</p>
+
+<div class="health-head lv-{{ h.level }}">
+  <span class="health-badge lv-{{ h.level }}">{{ h.label }}</span>
+  <div>
+    <div class="health-title">{{ h.head }}</div>
+    <div class="meta">{{ h.sub }}</div>
+  </div>
+</div>
+
+{% if h.rows %}
+<ul class="list">
+  {% for r in h.rows %}
+  <li class="list-row">
+    <strong class="health-label">{{ r.label }}</strong>
+    <span class="meta">{{ r.value }}{% if r.note %} · {{ r.note }}{% endif %}</span>
+    <span class="health-badge lv-{{ r.level }}">{{ {'ok': 'OK', 'check': 'Check', 'alert': 'Alert'}[r.level] }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+<p class="meta">{{ h.versions }}</p>
+
+<h2>Details</h2>
+<ul class="plain-list">
+  <li>Last report from the Pi: {% if h.received %}{{ h.received.replace('T', ' ') }}{% else %}none yet (the Pi helper is set up in Phase 6b){% endif %}</li>
+  <li>Display last fetched the schedule: {% if display_seen %}{{ display_seen.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}not yet{% endif %}</li>
+  {% if h.readings %}
+  <li>Readings as sent:
+    {% for k, v in h.readings|dictsort %}<code>{{ k }}={{ v }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+  {% endif %}
+  {% if commands %}
+  <li>Recent Restart / Shut down requests:
+    {% for c in commands %}{{ c.action }} at {{ c.requested.replace('T', ' ') }}{% if c.delivered %} (picked up {{ c.delivered[11:] }}){% else %} (waiting){% endif %}{% if not loop.last %}; {% endif %}{% endfor %}</li>
+  {% endif %}
+</ul>
+
+<h2>Limits</h2>
+{% if errors %}<p class="error-summary" role="alert">Please check the highlighted fields.</p>{% endif %}
+<form method="post" action="/health" class="form" novalidate>
+  {% for key, spec in threshold_keys.items() %}
+  <div class="field {% if errors[key] %}has-error{% endif %}">
+    <label for="{{ key }}">{{ spec[0] }}</label>
+    <input id="{{ key }}" name="{{ key }}" type="number" min="{{ spec[1] }}" max="{{ spec[2] }}" inputmode="numeric" value="{{ values[key] }}">
+    {% if errors[key] %}<p class="err">{{ errors[key] }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <div class="field {% if errors.health_tell %}has-error{% endif %}">
+    <label for="health_tell">Who to tell when the button turns amber or red</label>
+    <input id="health_tell" name="health_tell" type="text" maxlength="30" value="{{ values.health_tell }}">
+    <p class="hint">Shown on the shelf as "Tell …". Leave empty to show only what needs checking.</p>
+    {% if errors.health_tell %}<p class="err">{{ errors.health_tell }}</p>{% endif %}
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Save</button> <a class="btn btn-quiet" href="/settings">Back to Settings</a></div>
+</form>
+{% endblock %}
