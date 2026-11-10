@@ -48,8 +48,11 @@ After the reboot:
 
 - **Kiosk:** Chromium opens `http://192.168.6.30:8087/display?kiosk=1` full
   screen, using its own profile (`~/.config/calendar-kiosk`) with
-  `--password-store=basic`, so no keyring prompt appears. If it closes it
-  reopens within a few seconds.
+  `--password-store=basic`, so no keyring prompt appears. It runs as the
+  systemd user service `calendar-kiosk`, which reopens it within a few
+  seconds if it closes. Both services are started by one autostart entry,
+  `~/.config/autostart/n4mi-calendar.desktop`, which first hands the desktop
+  session's settings (such as `WAYLAND_DISPLAY`) to systemd.
 - **Helper:** `calendar-agent` (a systemd user service) reports to the server
   every 30 s, and the health button on the display turns green.
 - **Night:** during dark hours (set in the editor's Settings) the helper turns
@@ -68,6 +71,8 @@ After the reboot:
 |---|---|
 | Close the calendar for maintenance (it stays closed) | `calendar-kiosk stop` |
 | Open it again | `calendar-kiosk start` (or reboot) |
+| Is the calendar running? | `calendar-kiosk status` |
+| The calendar's log | `journalctl --user -u calendar-kiosk -n 40 --no-pager` |
 | See the helper's status | `systemctl --user status calendar-agent` |
 | Watch the helper's log | `journalctl --user -u calendar-agent -f` |
 | Send one report by hand and see the reply | `calendar-agent --once` |
@@ -90,9 +95,10 @@ that the calendar opens and the health button is green.
 ### Removing
 
 ```bash
-systemctl --user stop calendar-agent
-rm ~/.config/autostart/calendar-kiosk.desktop ~/.config/autostart/calendar-agent.desktop
-rm ~/.config/systemd/user/calendar-agent.service ~/.local/bin/calendar-agent ~/.local/bin/calendar-kiosk
+systemctl --user stop calendar-agent calendar-kiosk
+rm ~/.config/autostart/n4mi-calendar.desktop
+rm ~/.config/systemd/user/calendar-agent.service ~/.config/systemd/user/calendar-kiosk.service
+rm ~/.local/bin/calendar-agent ~/.local/bin/calendar-kiosk
 sudo rm /etc/polkit-1/rules.d/50-n4mi-calendar.rules
 ```
 

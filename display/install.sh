@@ -7,9 +7,9 @@
 #
 # What it does:
 #   ~/.local/bin/calendar-agent      the helper (health, night screen, restart)
-#   ~/.local/bin/calendar-kiosk      keeps the calendar open full screen
-#   ~/.config/systemd/user/calendar-agent.service
-#   ~/.config/autostart/calendar-*.desktop   start both when the desktop starts
+#   ~/.local/bin/calendar-kiosk      the calendar full screen (stop / start / status)
+#   ~/.config/systemd/user/calendar-agent.service and calendar-kiosk.service
+#   ~/.config/autostart/n4mi-calendar.desktop   starts both when the desktop starts
 #   /etc/polkit-1/rules.d/50-n4mi-calendar.rules   lets this login restart or
 #        turn off the Pi from the health panel (asks for your password once, via sudo)
 #
@@ -37,6 +37,7 @@ mkdir -p "$BIN" "$UNIT_DIR" "$AUTO"
 install -m 755 "$HERE/calendar-agent.py" "$BIN/calendar-agent"
 install -m 755 "$HERE/calendar-kiosk.sh" "$BIN/calendar-kiosk"
 install -m 644 "$HERE/calendar-agent.service" "$UNIT_DIR/calendar-agent.service"
+install -m 644 "$HERE/calendar-kiosk.service" "$UNIT_DIR/calendar-kiosk.service"
 echo "Installed the helper and the kiosk script to $BIN"
 
 # Autostart. Raspberry Pi OS's labwc session runs ~/.config/autostart entries
@@ -45,23 +46,17 @@ if ! grep -qs "xdg-autostart" /etc/xdg/labwc/autostart; then
   echo "Warning: /etc/xdg/labwc/autostart doesn't run XDG autostart entries on this system." >&2
   echo "         The entries below may not start at login; see docs/pi-setup.md." >&2
 fi
-cat > "$AUTO/calendar-kiosk.desktop" <<EOF
+# One entry: hand the desktop session's settings to systemd, then start both services.
+rm -f "$AUTO/calendar-kiosk.desktop" "$AUTO/calendar-agent.desktop"   # from the first 6b version
+cat > "$AUTO/n4mi-calendar.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=N4MI Calendar (kiosk)
-Comment=Keeps the calendar open full screen
-Exec=$BIN/calendar-kiosk
+Name=N4MI Calendar
+Comment=Starts the calendar (full screen) and its helper inside this desktop session
+Exec=sh -c "systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE XDG_CURRENT_DESKTOP DISPLAY; systemctl --user restart calendar-agent.service calendar-kiosk.service"
 X-GNOME-Autostart-enabled=true
 EOF
-cat > "$AUTO/calendar-agent.desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Name=N4MI Calendar (helper)
-Comment=Starts the calendar's health, night-screen and restart helper inside this desktop session
-Exec=sh -c "systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR; systemctl --user restart calendar-agent.service"
-X-GNOME-Autostart-enabled=true
-EOF
-echo "Added autostart entries in $AUTO"
+echo "Added the autostart entry in $AUTO"
 
 # Restart / Shut down from the health panel.
 RULE=/etc/polkit-1/rules.d/50-n4mi-calendar.rules
@@ -86,4 +81,4 @@ rm -f "$TMP"
 systemctl --user daemon-reload
 echo
 echo "Done. Reboot to start everything:  sudo reboot"
-echo "Check the helper after the reboot: systemctl --user status calendar-agent"
+echo "Check after the reboot: systemctl --user status calendar-agent calendar-kiosk --no-pager"

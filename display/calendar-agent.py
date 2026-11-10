@@ -38,7 +38,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-VERSION = "1.0"
+VERSION = "1.1"
 SERVER = os.environ.get("CAL_SERVER", "http://192.168.6.30:8087").rstrip("/")
 REPORT_EVERY = int(os.environ.get("CAL_REPORT_SECONDS", "30"))
 NIGHT_CONTROL = os.environ.get("CAL_NIGHT_CONTROL", "1") != "0"   # 0 = never touch the HDMI output
@@ -177,6 +177,9 @@ def readings(hdmi_state: str = "") -> dict:
 # ------------------------------------------------------------------ the server
 
 
+_reporting = {"ok": None}   # last outcome, so the log shows changes, not every report
+
+
 def post(path: str, body: dict) -> dict | None:
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(SERVER + path, data=data, method="POST",
@@ -184,10 +187,16 @@ def post(path: str, body: dict) -> dict | None:
                                           "User-Agent": f"N4MI-Calendar-Agent/{VERSION}"})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            reply = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        log(f"report not sent: {type(exc).__name__}")
+        if _reporting["ok"] is not False:
+            log(f"report not sent: {type(exc).__name__} (will keep trying every {REPORT_EVERY} s)")
+        _reporting["ok"] = False
         return None
+    if _reporting["ok"] is not True:
+        log("reports reaching the server")
+    _reporting["ok"] = True
+    return reply
 
 
 def run_command(action: str) -> None:

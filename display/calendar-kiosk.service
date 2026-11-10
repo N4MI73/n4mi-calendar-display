@@ -1,0 +1,16 @@
+# N4MI Calendar Display — the calendar, full screen in Chromium (Phase 6b).
+# A systemd *user* unit: installed to ~/.config/systemd/user/ by install.sh and
+# started from the desktop's autostart (it needs the desktop's WAYLAND_DISPLAY).
+# If Chromium closes or crashes it is reopened after 3 seconds; "stop" keeps it closed.
+#
+# Stop / start: calendar-kiosk stop | start
+# Logs:         journalctl --user -u calendar-kiosk -n 40 --no-pager
+
+[Unit]
+Description=N4MI Calendar Display kiosk (Chromium full screen)
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=%h/.local/bin/calendar-kiosk run
+Restart=always
+RestartSec=3
