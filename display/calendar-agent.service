@@ -1,0 +1,17 @@
+# N4MI Calendar Display — the shelf Pi's helper (Phase 6b).
+# A systemd *user* unit: installed to ~/.config/systemd/user/ by install.sh and
+# started from the desktop's autostart, so it runs inside the desktop session
+# (it needs WAYLAND_DISPLAY to switch the HDMI picture off and on).
+#
+# Logs:   journalctl --user -u calendar-agent -f
+# Status: systemctl --user status calendar-agent
+
+[Unit]
+Description=N4MI Calendar Display helper (health reports, night screen, restart)
+
+[Service]
+ExecStart=%h/.local/bin/calendar-agent
+Restart=always
+RestartSec=5
+Environment=CAL_SERVER=http://192.168.6.30:8087
+Environment=PYTHONUNBUFFERED=1
