@@ -104,6 +104,82 @@ sudo rm /etc/polkit-1/rules.d/50-n4mi-calendar.rules
 
 ## Read-only overlay (Phase 6c)
 
-To come: turning on Raspberry Pi OS's overlay file system so a power cut
-can't damage the system, the update routine with it, and the power-pull
-tests.
+With Raspberry Pi OS's overlay file system on, the SSD is only read: every
+change while the Pi runs goes to a working area in memory and is thrown away
+at the next start. A power cut therefore can't damage the system, which is
+why the display can simply be unplugged.
+
+What that means day to day:
+
+- Nothing on the Pi is saved between starts: no browser history or saved
+  schedule (D65), no log files, and **no updates or setting changes** unless
+  the overlay is turned off first.
+- The health panel's **Storage** reading shows the in-memory working area
+  while the overlay is on. It starts nearly empty after each start.
+- The clock comes from the RTC battery and the network, not from a saved file.
+
+Before turning it on, make sure the RTC battery is being charged:
+
+```bash
+grep -n rtc_bbat /boot/firmware/config.txt
+cat /sys/class/rtc/rtc0/charging_voltage
+```
+
+If the first line shows nothing, add the setting, then reboot:
+
+```bash
+echo 'dtparam=rtc_bbat_vchg=3000000' | sudo tee -a /boot/firmware/config.txt
+```
+
+After the reboot `charging_voltage` reads `3000000`.
+
+### Turning the overlay on
+
+```bash
+sudo raspi-config nonint do_overlayfs 0
+sudo reboot
+```
+
+Check after the reboot (prints "overlay ON"):
+
+```bash
+grep -q ' / overlay ' /proc/mounts && echo "overlay ON" || echo "overlay OFF"
+```
+
+### Updating with the overlay (the routine)
+
+```bash
+sudo raspi-config nonint do_overlayfs 1     # 1 = off
+sudo reboot
+# ... reconnect, then update what's needed:
+sudo apt update && sudo apt full-upgrade
+cd ~/n4mi-calendar-display && git pull && bash display/install.sh
+sudo reboot
+# ... check the calendar opens and the health button is green, then:
+sudo raspi-config nonint do_overlayfs 0     # 0 = on
+sudo reboot
+```
+
+`install.sh` refuses to run while the overlay is on, as a reminder.
+
+### Recovery tested
+
+Phase 6c tests on this Pi (2026-11-12), with the overlay on:
+
+- **Overlay:** on after `do_overlayfs 0`; a test file created before a
+  restart was gone after it. RTC charging voltage 3000000.
+- **Power pulls:** the Pi's plug pulled at random moments — idle, about 10 s
+  into a boot, as the desktop appeared, with the health panel open, halfway
+  through Add, during dark hours (screen dark, and just after a wake touch),
+  and within 5 s of the calendar appearing. Ten pulls in all.
+  Every time the calendar came back by itself in **18–22 seconds**, the health
+  button turned green and the clock was right.
+- **During dark hours** the calendar shows for a moment after the restart,
+  then the screen goes dark again (the page needs its schedule and the helper
+  its first reply before they know it's dark). Accepted: it only happens when
+  power returns at night.
+- **Simulated faults:** with the helper stopped, the button turned amber
+  ("Pi isn't reporting") after about 5 minutes and green again once it was
+  started; with the server stack stopped, amber "Can't reach the calendar"
+  with the schedule still shown, and back to green when started; Restart from
+  the health panel works with the overlay on.
