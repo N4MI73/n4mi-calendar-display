@@ -194,6 +194,7 @@
     check: ["M12 4l9 16H3z", "M12 10v4", "M12 17.5v.5"],
     alert: ["M8 3h8l5 5v8l-5 5H8l-5-5V8z", "M9 9l6 6", "M15 9l-6 6"],
     none: ["M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18", "M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4", "M12 17.5v.5"],
+    old: ["M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18", "M12 7v5l3 2"],
     restart: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7"],
     power: ["M12 3v9", "M6.3 7.5a8 8 0 1 0 11.4 0"]
   };
@@ -1075,7 +1076,8 @@
   // can't be reached the page decides for itself: Check after a few minutes,
   // Alert once the schedule is stale, in step with the "Not updated" bar.
 
-  var HEALTH_WORDS = { none: "Not set up", ok: "OK", check: "Check", alert: "Alert" };
+  // "old" is for a reading row only: sent too long ago to count (v0.6.1).
+  var HEALTH_WORDS = { none: "Not set up", ok: "OK", check: "Check", alert: "Alert", old: "Old" };
   var OFFLINE_CHECK_MIN = 5;
 
   function healthView(n) {
@@ -1123,7 +1125,7 @@
     card.appendChild(head);
     var rows = el("div", "hrows");
     (h.rows || []).forEach(function (r) {
-      var row = el("div", "hrow");
+      var row = el("div", r.level === "old" ? "hrow old" : "hrow");
       row.appendChild(el("div", "k", r.label));
       row.appendChild(el("div", "v", r.value));
       var right = el("div", "r");

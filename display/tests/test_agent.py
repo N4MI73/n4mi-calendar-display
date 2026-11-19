@@ -128,6 +128,63 @@ class Readings(unittest.TestCase):
             self.assertEqual(agent.throttled(), 0x50005)
 
 
+# Fictional partition ID; the layout matches the shelf Pi (USB SSD, overlay on).
+CMDLINE = ("console=serial0,115200 console=tty1 root=PARTUUID=a1b2c3d4-02 rootfstype=ext4 "
+           "fsck.repair=yes rootwait boot=overlay cfg80211.ieee80211_regdom=US\n")
+MOUNTS_OVERLAY = """/dev/sda2 /media/root-ro ext4 ro,relatime 0 0
+overlayroot / overlay rw,relatime,lowerdir=/media/root-ro,upperdir=/media/root-rw/overlay 0 0
+/dev/sda1 /boot/firmware vfat ro,relatime 0 0
+"""
+MOUNTS_PLAIN = """/dev/sda2 / ext4 rw,noatime 0 0
+/dev/sda1 /boot/firmware vfat rw,relatime 0 0
+"""
+LINK = "/dev/disk/by-partuuid/a1b2c3d4-02"
+
+
+def fake_dev(present: dict):
+    """exists() and realpath() over a pretend /dev: {path: what it points to}."""
+    return (lambda p: p in present), (lambda p: present.get(p, p))
+
+
+class BootDrive(unittest.TestCase):
+    def test_reads_partition_id_and_mounted_device(self):
+        self.assertEqual(agent.boot_partuuid(CMDLINE), "a1b2c3d4-02")
+        self.assertIsNone(agent.boot_partuuid("root=/dev/mmcblk0p2 rootwait"))
+        self.assertEqual(agent.root_source(MOUNTS_OVERLAY), "/dev/sda2")
+        self.assertEqual(agent.root_source(MOUNTS_PLAIN), "/dev/sda2")
+        self.assertIsNone(agent.root_source("overlayroot / overlay rw 0 0\n"))
+
+    def test_present_with_overlay_on_and_off(self):
+        exists, real = fake_dev({LINK: "/dev/sda2", "/dev/sda2": "/dev/sda2"})
+        for mounts in (MOUNTS_OVERLAY, MOUNTS_PLAIN):
+            self.assertTrue(agent.ssd_present(CMDLINE, mounts, exists, real))
+
+    def test_found_under_another_name_at_start(self):
+        """Started as sdb: still the boot drive, so present (1.1 said missing)."""
+        mounts = MOUNTS_OVERLAY.replace("sda", "sdb")
+        exists, real = fake_dev({LINK: "/dev/sdb2", "/dev/sdb2": "/dev/sdb2"})
+        self.assertTrue(agent.ssd_present(CMDLINE, mounts, exists, real))
+
+    def test_drive_gone(self):
+        exists, real = fake_dev({})
+        self.assertFalse(agent.ssd_present(CMDLINE, MOUNTS_OVERLAY, exists, real))
+
+    def test_dropped_and_came_back_under_a_new_name(self):
+        """The system is still tied to the old sda2, so it counts as missing."""
+        exists, real = fake_dev({LINK: "/dev/sdb2", "/dev/sdb2": "/dev/sdb2"})
+        self.assertFalse(agent.ssd_present(CMDLINE, MOUNTS_OVERLAY, exists, real))
+
+    def test_another_drive_with_the_old_name_does_not_fool_it(self):
+        exists, real = fake_dev({"/dev/sda": "/dev/sda", "/dev/sda2": "/dev/sda2"})
+        self.assertFalse(agent.ssd_present(CMDLINE, MOUNTS_OVERLAY, exists, real))
+
+    def test_falls_back_without_a_partition_id(self):
+        exists, real = fake_dev({"/dev/sda2": "/dev/sda2"})
+        self.assertTrue(agent.ssd_present("root=/dev/sda2", MOUNTS_PLAIN, exists, real))
+        exists, real = fake_dev({})
+        self.assertFalse(agent.ssd_present("root=/dev/sda2", MOUNTS_PLAIN, exists, real))
+
+
 class Commands(unittest.TestCase):
     def test_only_known_actions_run(self):
         with mock.patch.object(agent.subprocess, "run") as run:

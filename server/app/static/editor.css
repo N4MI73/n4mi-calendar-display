@@ -236,4 +236,5 @@ select.unit { width: auto; min-height: 44px; }
 .health-badge.lv-check { background: #F5A524; color: #0E1116; }
 .health-badge.lv-alert { background: #FF6B6B; color: #0E1116; }
 .health-badge.lv-none { background: #3A4252; color: #E3E6EB; }
+.health-badge.lv-old { background: #3A4252; color: #E3E6EB; }
 code { font-size: 0.85rem; overflow-wrap: anywhere; }

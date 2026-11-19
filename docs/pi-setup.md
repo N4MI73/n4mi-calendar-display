@@ -9,7 +9,8 @@ password.
 - Raspberry Pi 5 (4 GB) with Active Cooler and the official rechargeable RTC
   battery, in an aluminium case.
 - System on an NVMe SSD in a USB 3 enclosure (shows up as `/dev/sda`); no
-  microSD card in normal use.
+  microSD card in normal use. The helper checks it by its partition ID (the
+  `root=PARTUUID=` entry in `/proc/cmdline`), not by the name `/dev/sda`.
 - 10.1" HDMI capacitive touch monitor, 1280×800, landscape: HDMI to the Pi's
   **HDMI 0** (`HDMI-A-1`), touch over USB, on its own 5 V supply. Its
   brightness is a button on the monitor (no software control).
@@ -54,7 +55,10 @@ After the reboot:
   `~/.config/autostart/n4mi-calendar.desktop`, which first hands the desktop
   session's settings (such as `WAYLAND_DISPLAY`) to systemd.
 - **Helper:** `calendar-agent` (a systemd user service) reports to the server
-  every 30 s, and the health button on the display turns green.
+  every 30 s, and the health button on the display turns green. From helper
+  1.2, "Storage: Drive not found" means the boot partition (found by its ID)
+  is gone, or the drive dropped off and came back under another name, which
+  also needs a restart.
 - **Night:** during dark hours (set in the editor's Settings) the helper turns
   the HDMI picture off with `wlr-randr`, so the monitor is fully dark. A touch
   turns it on for the wake time (default 120 s); the page itself makes sure

@@ -22,13 +22,20 @@ import sqlite3
 import time as _time
 from datetime import datetime, timedelta
 
-from . import store
+from . import store, timeutil
 
 TS_FMT = "%Y-%m-%dT%H:%M:%S"
 COMMAND_TTL_MINUTES = 5
 ACTIONS = ("restart", "shutdown")
 LEVELS = ("ok", "check", "alert")          # worst last; "none" = not set up
 LABELS = {"none": "Not set up", "ok": "OK", "check": "Check", "alert": "Alert"}
+# A reading counts towards the button only while it's fresh: the Pi reports
+# every 30 s, so this allows about four missed reports. An older reading is
+# shown greyed ("old"), with the time it was sent, and the "Pi check-in" row
+# alone says whether the Pi has gone quiet (v0.6.1). This stops a report sent
+# just before a power cut (for example "Drive not found") looking like a live
+# alert after the Pi starts again.
+FRESH_SECONDS = 120
 
 # get_throttled bits (Raspberry Pi firmware).
 UNDERVOLT_NOW = 1 << 0
@@ -263,6 +270,20 @@ def _worst(levels):
     return best
 
 
+def _as_of(received: datetime, now: datetime) -> str:
+    when = timeutil.fmt_time(received)
+    if received.date() != now.date():
+        when = received.strftime("%a") + " " + when
+    return "As of " + when
+
+
+def _mark_old(rows: list, start: int, received: datetime, now: datetime) -> None:
+    """Grey out the reading rows from `start` on: they no longer set the button."""
+    for row in rows[start:]:
+        row["level"] = "old"
+        row["note"] = _as_of(received, now)
+
+
 def evaluate(conn: sqlite3.Connection, now: datetime, app_version: str = "") -> dict:
     """The health summary for the display and the editor."""
     cfg = store.get_config(conn)
@@ -282,6 +303,8 @@ def evaluate(conn: sqlite3.Connection, now: datetime, app_version: str = "") -> 
         return "ok", ""
 
     set_up = st["received"] is not None
+    fresh = set_up and (now - st["received"]).total_seconds() <= FRESH_SECONDS
+    first_reading = len(rows)
     if set_up:
         temp = r.get("temp_c")
         if temp is not None:
@@ -305,6 +328,8 @@ def evaluate(conn: sqlite3.Connection, now: datetime, app_version: str = "") -> 
             lv = "alert" if free < t["health_disk_alert"] else "check" if free < t["health_disk_check"] else "ok"
             note = {"alert": "Almost full", "check": "Getting full"}.get(lv, "")
             rows.append(_row("storage", "Storage", f"{round(free)} % free", lv, note))
+    if set_up and not fresh:
+        _mark_old(rows, first_reading, st["received"], now)
 
     lv, _ = age_level(st["display_seen"])
     if lv:
@@ -323,6 +348,8 @@ def evaluate(conn: sqlite3.Connection, now: datetime, app_version: str = "") -> 
                 rows.append(_row("clock", "Clock", f"Off by {amount}", "check", "Clock is wrong"))
             else:
                 rows.append(_row("clock", "Clock", "Correct", "ok"))
+            if not fresh:
+                _mark_old(rows, len(rows) - 1, st["received"], now)
 
     versions = [f"Calendar {app_version}" if app_version else "Calendar"]
     if r.get("helper_version"):
@@ -339,7 +366,10 @@ def evaluate(conn: sqlite3.Connection, now: datetime, app_version: str = "") -> 
         tell = cfg.get("health_tell", "").strip()
         worst_note = next((row["note"] for lvl in ("alert", "check") for row in rows
                            if row["level"] == lvl and row["note"]), "")
-        if level == "ok":
+        if level == "ok" and not fresh:
+            head = "Waiting for the Pi's next check-in"
+            sub = "Last check-in " + _ago(now - st["received"])
+        elif level == "ok":
             head = "Everything looks good"
             sub = "Checked " + _ago(now - st["received"])
         else:

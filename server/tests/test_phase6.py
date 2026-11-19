@@ -68,7 +68,7 @@ class LevelTests(Base):
         self.assertEqual(h["level"], "ok")
         self.assertEqual(h["head"], "Everything looks good")
         self.assertEqual(h["sub"], "Checked less than a minute ago")
-        self.assertEqual(health.evaluate(self.conn, NOW + timedelta(minutes=3), "0.6.0")["sub"], "Checked 3 minutes ago")
+        self.assertEqual(health.evaluate(self.conn, NOW + timedelta(seconds=90), "0.6.0")["sub"], "Checked 1 minute ago")
         keys = [r["key"] for r in h["rows"]]
         self.assertEqual(keys, ["temperature", "power", "storage", "display", "pi", "clock"])
         self.assertTrue(all(r["level"] == "ok" for r in h["rows"]))
@@ -251,6 +251,78 @@ class ApiTests(Base):
         js = (APP_DIR / "static" / "display.js").read_text(encoding="utf-8")
         for needle in ('"/api/v1/device/command"', "drawHealth", "drawDeviceConfirm", "not_set_up"):
             self.assertIn(needle, js)
+
+
+# ------------------------------------------------- old readings (v0.6.1)
+
+
+class OldReadingTests(Base):
+    """A report sent before a power cut mustn't look like a live alert afterwards."""
+
+    def test_readings_count_up_to_two_minutes(self):
+        self.send(at=NOW, ssd_present=False)
+        r = self.rows(NOW + timedelta(seconds=health.FRESH_SECONDS))
+        self.assertEqual(r["storage"]["level"], "alert")
+        r = self.rows(NOW + timedelta(seconds=health.FRESH_SECONDS + 1))
+        self.assertEqual(r["storage"]["level"], "old")
+        self.assertEqual(r["storage"]["value"], "Drive not found")
+        self.assertEqual(r["storage"]["note"], "As of 8:05 AM")
+
+    def test_old_drive_missing_does_not_turn_the_button_red(self):
+        self.send(at=NOW, ssd_present=False)
+        h = health.evaluate(self.conn, NOW + timedelta(minutes=3), "0.6.1")
+        self.assertEqual(h["level"], "ok")
+        self.assertEqual(h["head"], "Waiting for the Pi's next check-in")
+        self.assertEqual(h["sub"], "Last check-in 3 minutes ago")
+        rows = {r["key"]: r for r in h["rows"]}
+        self.assertEqual(rows["pi"]["level"], "ok")
+        for key in ("temperature", "power", "storage", "clock"):
+            self.assertEqual(rows[key]["level"], "old", key)
+
+    def test_old_hot_and_low_power_readings_do_not_count(self):
+        self.send(at=NOW, temp_c=85, throttled=0x1, disk_free_pct=2, epoch=1_800_000_000.0 + 600)
+        self.assertEqual(health.evaluate(self.conn, NOW, "0.6.1")["level"], "alert")
+        h = health.evaluate(self.conn, NOW + timedelta(minutes=4), "0.6.1")
+        self.assertEqual(h["level"], "ok")
+        self.assertTrue(all(r["level"] == "old" for r in h["rows"] if r["key"] != "pi"))
+
+    def test_pi_check_in_still_sets_the_level_when_quiet(self):
+        self.send(at=NOW, ssd_present=False)
+        h = health.evaluate(self.conn, NOW + timedelta(minutes=6), "0.6.1")
+        self.assertEqual(h["level"], "check")
+        self.assertEqual(h["sub"], "The Pi isn't reporting")
+        h = health.evaluate(self.conn, NOW + timedelta(minutes=31), "0.6.1")
+        self.assertEqual(h["level"], "alert")
+
+    def test_display_contact_is_not_greyed(self):
+        self.send(at=NOW)
+        health.mark_display_seen(self.conn, NOW)
+        r = self.rows(NOW + timedelta(minutes=40))
+        self.assertEqual(r["display"]["level"], "alert")
+
+    def test_a_new_report_brings_the_readings_back(self):
+        self.send(at=NOW, ssd_present=False)
+        self.assertEqual(self.rows(NOW + timedelta(minutes=10))["storage"]["level"], "old")
+        self.send(at=NOW + timedelta(minutes=10))
+        r = self.rows(NOW + timedelta(minutes=10, seconds=5))
+        self.assertEqual(r["storage"]["level"], "ok")
+        self.assertEqual(r["storage"]["note"], "")
+
+    def test_as_of_names_the_day_when_not_today(self):
+        self.send(at=NOW)
+        r = self.rows(NOW + timedelta(days=1))
+        self.assertEqual(r["temperature"]["note"], "As of Mon 8:05 AM")
+
+    def test_editor_and_display_show_old(self):
+        self.send(at=NOW, ssd_present=False)
+        client = TestClient(create_app(self.db_path))
+        page = client.get("/health").text
+        self.assertIn("lv-old", page)
+        self.assertIn(">Old<", page)
+        js = (APP_DIR / "static" / "display.js").read_text(encoding="utf-8")
+        self.assertIn('old: "Old"', js)
+        css = (APP_DIR / "static" / "display.css").read_text(encoding="utf-8")
+        self.assertIn(".lv-old", css)
 
 
 class MigrationTests(unittest.TestCase):

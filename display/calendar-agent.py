@@ -38,7 +38,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-VERSION = "1.1"
+VERSION = "1.2"
 SERVER = os.environ.get("CAL_SERVER", "http://192.168.6.30:8087").rstrip("/")
 REPORT_EVERY = int(os.environ.get("CAL_REPORT_SECONDS", "30"))
 NIGHT_CONTROL = os.environ.get("CAL_NIGHT_CONTROL", "1") != "0"   # 0 = never touch the HDMI output
@@ -126,9 +126,56 @@ def root_fs() -> str:
     return ""
 
 
-def ssd_present() -> bool:
-    """The system SSD (USB enclosure) shows up as /dev/sda."""
-    return os.path.exists("/dev/sda")
+def boot_partuuid(cmdline: str | None) -> str | None:
+    """The boot partition's ID from the kernel command line (root=PARTUUID=...)."""
+    m = re.search(r"(?:^|\s)root=PARTUUID=([0-9A-Za-z-]+)", cmdline or "")
+    return m.group(1) if m else None
+
+
+def root_source(mounts: str | None) -> str | None:
+    """The device the system was started from, as mounted.
+
+    With the read-only overlay on, "/" is the overlay and the drive itself is
+    mounted read-only at /media/root-ro; without it, the drive is "/".
+    """
+    found = {}
+    for line in (mounts or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] in ("/", "/media/root-ro"):
+            found[parts[1]] = parts[0]
+    for point in ("/media/root-ro", "/"):
+        dev = found.get(point, "")
+        if dev.startswith("/dev/") and dev != "/dev/root":
+            return dev
+    return None
+
+
+def ssd_present(cmdline: str | None = None, mounts: str | None = None,
+                exists=os.path.exists, realpath=os.path.realpath) -> bool:
+    """Is the boot drive still there? (helper 1.2)
+
+    Checks the boot partition by its ID rather than by the name /dev/sda, which
+    could differ if the drive were found in another order. The partition must
+    exist and be the very device the system was started from: if the drive
+    dropped off and came back under a new name, the running system is still
+    tied to the old one, so that counts as missing (a restart is needed).
+    """
+    if cmdline is None:
+        cmdline = _read("/proc/cmdline")
+    if mounts is None:
+        mounts = _read("/proc/mounts")
+    part = boot_partuuid(cmdline)
+    src = root_source(mounts)
+    if part:
+        link = f"/dev/disk/by-partuuid/{part}"
+        if not exists(link):
+            return False
+        if src:
+            return exists(src) and realpath(link) == realpath(src)
+        return True
+    if src:
+        return exists(src)
+    return exists("/dev/sda")      # no ID and no device found: the 1.1 check
 
 
 def uptime_s() -> int | None:

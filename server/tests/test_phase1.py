@@ -361,9 +361,11 @@ class TestEditorPages(unittest.TestCase):
         medical = conn.execute("SELECT id FROM categories WHERE name='Medical'").fetchone()[0]
         conn.close()
 
-        # Create an event for two people.
-        form = {"title": "Eye exam", "location": "Test Clinic", "start_date": "2027-01-05", "start_time": "09:00",
-                "end_date": "2027-01-05", "end_time": "10:00", "category_id": str(medical),
+        # Create an event for two people. The events list shows dates from today
+        # on by the real clock, so the event is dated a few weeks from now.
+        when = (timeutil.now_local() + timedelta(days=45)).date().isoformat()
+        form = {"title": "Eye exam", "location": "Test Clinic", "start_date": when, "start_time": "09:00",
+                "end_date": when, "end_time": "10:00", "category_id": str(medical),
                 "people": [str(alex), str(sam)], "reminder_mode": "default"}
         r = c.post("/events/new", data=form, follow_redirects=True)
         self.assertEqual(r.status_code, 200)

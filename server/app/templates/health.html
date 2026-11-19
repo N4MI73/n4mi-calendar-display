@@ -3,7 +3,7 @@
 {% block title %}Health{% endblock %}
 {% block content %}
 <h1>Health</h1>
-<p class="hint">How the shelf display is doing. The Pi reports every 30 seconds; the shelf's health button shows the worst of these rows.</p>
+<p class="hint">How the shelf display is doing. The Pi reports every 30 seconds; the shelf's health button shows the worst of these rows. A reading more than two minutes old is greyed out and marked "Old"; it no longer counts, and the Pi check-in row shows whether the Pi has gone quiet.</p>
 
 <div class="health-head lv-{{ h.level }}">
   <span class="health-badge lv-{{ h.level }}">{{ h.label }}</span>
@@ -19,7 +19,7 @@
   <li class="list-row">
     <strong class="health-label">{{ r.label }}</strong>
     <span class="meta">{{ r.value }}{% if r.note %} · {{ r.note }}{% endif %}</span>
-    <span class="health-badge lv-{{ r.level }}">{{ {'ok': 'OK', 'check': 'Check', 'alert': 'Alert'}[r.level] }}</span>
+    <span class="health-badge lv-{{ r.level }}">{{ {'ok': 'OK', 'check': 'Check', 'alert': 'Alert', 'old': 'Old'}[r.level] }}</span>
   </li>
   {% endfor %}
 </ul>

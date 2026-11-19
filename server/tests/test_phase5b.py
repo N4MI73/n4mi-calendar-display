@@ -10,7 +10,7 @@ import os
 import tempfile
 import unittest
 import urllib.error
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
@@ -18,7 +18,7 @@ os.environ["CAL_NO_AUTOAPP"] = "1"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import db, display, google_links, holidays, ical_import, importer, store  # noqa: E402
+from app import db, display, google_links, holidays, ical_import, importer, store, timeutil  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 import test_phase5 as p5  # noqa: E402  (the tests folder is on the path under discover)
@@ -144,14 +144,17 @@ class TestNotInGoogle(Base):
 
     def test_pages(self):
         client = TestClient(create_app(self.db_path))
-        self.add()
+        # The page lists events from today on by the real clock, so the event is
+        # dated a week from now (a fixed date stopped working once it had passed).
+        soon = (timeutil.now_local() + timedelta(days=7)).date().isoformat()
+        self.add(start_date=soon, end_date=soon)
         self.assertIn("Fetch from Google at least once first", client.get("/import/not-in-google").text)
         self.fetch(p5.feed(p5.DENTIST))
         r = client.get("/import/not-in-google")
         self.assertIn("Plumber", r.text)
         self.assertIn("calendar.google.com/calendar/render?action=TEMPLATE", r.text)
         self.assertNotIn("private-0123", r.text)
-        eid = store.list_events(self.conn, TODAY, date(2026, 12, 31))[0]["id"]
+        eid = store.list_events(self.conn, date.fromisoformat(soon), date.fromisoformat(soon))[0]["id"]
         self.assertIn("Add to Google", client.get(f"/events/{eid}/edit").text)
         r = client.post(f"/events/{eid}/not-needed", follow_redirects=True)
         self.assertIn("Everything here is also in Google", r.text)

@@ -104,6 +104,8 @@ html.kiosk, html.kiosk * { cursor: none !important; }
 .lv-check { background: #F5A524; color: #0E1116; }
 .lv-alert { background: #FF6B6B; color: #0E1116; }
 .lv-none { background: #3A4252; color: #E3E6EB; }
+.lv-old { background: #3A4252; color: #E3E6EB; }
+.sheet .hrow.old .v { color: var(--text-3); }
 .sheet .hhead { display: flex; align-items: center; gap: 1rem; }
 .sheet .hhead .dot { flex: 0 0 auto; width: 3.5rem; height: 3.5rem; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
 .sheet .hhead .dot svg { width: 2rem; height: 2rem; }

@@ -225,6 +225,13 @@ pulls a finished image (`pull_policy: always`).
 - **Settings → Health** in the editor: every reading, when it arrived, recent
   Restart / Shut down requests, the limits (temperature, free storage, no
   contact, clock), and the name shown as "Tell …" on the shelf.
+- **Old readings (v0.6.1):** the Pi's readings count towards the button only
+  for 2 minutes after they arrive (`health.FRESH_SECONDS`, about four missed
+  reports). After that the temperature, power, storage and clock rows show
+  **Old** in grey with the time they were sent ("As of 3:12 PM"), and only the
+  "Pi check-in" row (amber after 5 minutes, red after 30) sets the level. So a
+  report sent just before a power cut can't show as a live alert after the
+  Pi starts again.
 - **Title:** Settings → "Title in the top bar" (default "Family Calendar";
   empty hides it). The display API carries it as `title`.
 - `POST /api/v1/device/report` — the Pi helper's readings (JSON: `temp_c`,
