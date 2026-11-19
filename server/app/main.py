@@ -25,7 +25,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db, display, google_links, health, holidays, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.6.2"
 BASE_DIR = Path(__file__).parent
 
 
@@ -182,6 +182,30 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         data["app_version"] = APP_VERSION
+        return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/v{version:int}/display/days")
+    def api_display_days(version: int, request: Request, now: str | None = None):
+        """The Coming up panel (v0.6.2): ?from=YYYY-MM-DD&days=N, up to 12 months ahead."""
+        if version != display.API_VERSION:
+            return _unsupported(version)
+        moment = _moment(now)
+        if moment is None:
+            return _api_error(400, "bad_now", hint="Use now=YYYY-MM-DDTHH:MM")
+        q = request.query_params
+        try:
+            first = timeutil.parse_date(q.get("from", ""))
+            count = int(q.get("days", "30"))
+        except ValueError:
+            return _api_error(400, "bad_request", hint="Use from=YYYY-MM-DD&days=N")
+        c = conn()
+        try:
+            data = display.days_range(c, moment, first, count)
+        except ValueError as exc:
+            return _api_error(400, str(exc), hint=f"from must be today to {display.PANEL_LIMIT_DAYS} days ahead; "
+                                                  f"days 1 to {display.PANEL_MAX_DAYS}")
+        finally:
+            c.close()
         return JSONResponse(data, headers={"Cache-Control": "no-store"})
 
     def _health_for_display(h: dict) -> dict:

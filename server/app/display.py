@@ -102,40 +102,84 @@ def _day_json(d: date) -> dict:
     }
 
 
-def build(conn: sqlite3.Connection, now: datetime) -> dict:
-    """The display payload for local time `now`."""
-    cfg = store.get_config(conn)
-    upcoming = _int(cfg["upcoming_days"], 14)
+def _fill_days(conn: sqlite3.Connection, cfg: dict, first: date, last: date, carry_in: bool = True) -> dict:
+    """Days `first`..`last` (inclusive) with their events and holidays, keyed by date.
+
+    `carry_in`: list events that began before `first` and are still on (the main
+    schedule, whose first day is today). The Coming up panel leaves them out:
+    they are already in Today, or in an earlier part of the panel.
+    """
     dark_start = timeutil.parse_time(cfg["dark_start"])
     dark_end = timeutil.parse_time(cfg["dark_end"])
-    today = now.date()
-    last = today + timedelta(days=upcoming + CACHE_EXTRA_DAYS)
-
     days = {}
-    d = today
+    d = first
     while d <= last:
         days[d] = _day_json(d)
         d += timedelta(days=1)
 
-    for e in store.list_events(conn, today, last):
+    for e in store.list_events(conn, first, last):
         item = _event_json(e, dark_start, dark_end)
         start = timeutil.parse_local(e["start_local"]).date()
         end = timeutil.parse_local(e["end_local"]).date()
+        if start < first and not carry_in:
+            continue
         if e["all_day"]:
             # A multi-day event appears on each of its days, with "day N of M" (D41).
             count = (end - start).days + 1
-            d = max(start, today)
+            d = max(start, first)
             while d <= min(end, last):
                 entry = dict(item, day_index=(d - start).days + 1, day_count=count,
                              until=end.strftime("%a") if count > 1 else "")
                 days[d]["events"].append(entry)
                 d += timedelta(days=1)
         else:
-            # A timed event is listed on the day it starts (or today, if it began earlier and is still on).
-            days[max(start, today)]["events"].append(dict(item, day_index=1, day_count=1, until=""))
+            # A timed event is listed on the day it starts (or the first day, if it began earlier and is still on).
+            days[max(start, first)]["events"].append(dict(item, day_index=1, day_count=1, until=""))
 
-    for hd, names in holidays.between(today, last, holidays.chosen(cfg)).items():
+    for hd, names in holidays.between(first, last, holidays.chosen(cfg)).items():
         days[hd]["holidays"] = names
+    return days
+
+
+# The Coming up panel (v0.6.2): the shelf asks for the days after the main
+# schedule's window, 30 at a time, up to 12 months ahead.
+PANEL_LIMIT_DAYS = 365      # the furthest day offered: today + this
+PANEL_MAX_DAYS = 366        # most days in one request (a reload after a change asks for all loaded so far)
+
+
+def days_range(conn: sqlite3.Connection, now: datetime, first: date, count: int) -> dict:
+    """Days from `first` for `count` days, clipped to the 12-month limit.
+
+    Raises ValueError for a start before today or past the limit, or a bad count.
+    """
+    today = now.date()
+    limit = today + timedelta(days=PANEL_LIMIT_DAYS)
+    if not 1 <= count <= PANEL_MAX_DAYS:
+        raise ValueError("bad_days")
+    if first < today or first > limit:
+        raise ValueError("bad_from")
+    last = min(first + timedelta(days=count - 1), limit)
+    cfg = store.get_config(conn)
+    days = _fill_days(conn, cfg, first, last, carry_in=False)
+    return {
+        "ok": True,
+        "api": API_VERSION,
+        "generated": _fmt_local(now),
+        "from": first.strftime(timeutil.DATE_FMT),
+        "to": last.strftime(timeutil.DATE_FMT),
+        "limit": limit.strftime(timeutil.DATE_FMT),
+        "more": last < limit,
+        "days": [days[k] for k in sorted(days)],
+    }
+
+
+def build(conn: sqlite3.Connection, now: datetime) -> dict:
+    """The display payload for local time `now`."""
+    cfg = store.get_config(conn)
+    upcoming = _int(cfg["upcoming_days"], 14)
+    today = now.date()
+    last = today + timedelta(days=upcoming + CACHE_EXTRA_DAYS)
+    days = _fill_days(conn, cfg, today, last)
 
     reminders = [
         {"id": r["id"], "text": r["text"], "carry_over": bool(r["carry_over"]), "due": r["due_occ"]}

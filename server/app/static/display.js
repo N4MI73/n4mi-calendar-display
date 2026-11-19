@@ -53,6 +53,7 @@
   var comingTouched = 0;  // last scroll of Coming up (ms)
   var comingSig = "";     // what Coming up last showed, so it isn't rebuilt (and its scroll lost) needlessly
   var toastTimer = null;
+  var allp = null;        // the Coming up panel (v0.6.2), or null
 
   // ----------------------------------------------------------------- time
 
@@ -195,6 +196,7 @@
     alert: ["M8 3h8l5 5v8l-5 5H8l-5-5V8z", "M9 9l6 6", "M15 9l-6 6"],
     none: ["M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18", "M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4", "M12 17.5v.5"],
     old: ["M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18", "M12 7v5l3 2"],
+    down: ["M12 5v14", "M6 13l6 6 6-6"],
     restart: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7"],
     power: ["M12 3v9", "M6.3 7.5a8 8 0 1 0 11.4 0"]
   };
@@ -305,6 +307,7 @@
     // Night: fully black during dark hours unless woken by a tap (D13).
     $("night").hidden = !(inDarkHours(n, c) && Date.now() > wakeUntil);
     if (!$("night").hidden && ui) closeSheet();
+    if (!$("night").hidden && allp) closeAll();
 
     var days = dayMap();
     var todayKey = ymd(n);
@@ -1178,6 +1181,206 @@
     return card;
   }
 
+
+  // ------------------------------------------------ Coming up panel (v0.6.2)
+  //
+  // The "Coming up · See all" heading opens a panel of the next 30 days, from
+  // tomorrow, by day. "Load more" asks the server for 30 more, up to 12 months
+  // ahead. Tapping an item opens the usual details panel over it, and Close
+  // there comes back to the list. When the server can't be reached the panel
+  // shows only the saved schedule and says so; it never claims "nothing more".
+
+  var PANEL_DAYS = 30;
+  var PANEL_MAX_DAYS = 366;   // the server's limit for one request
+
+  function addDays(d, k) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + k); }
+
+  function openAll() {
+    var first = addDays(parseLocal(ymd(now())), 1);
+    var lastKey = ymd(addDays(first, PANEL_DAYS - 1));
+    var saved = ((data && data.days) || []).filter(function (d) { return d.date >= ymd(first) && d.date <= lastKey; });
+    var live = canAct();
+    // Like the server's panel days: leave out what began before tomorrow (it's in Today).
+    saved = saved.map(function (d) {
+      return Object.assign({}, d, { events: d.events.filter(function (ev) { return ev.start.slice(0, 10) >= ymd(first); }) });
+    });
+    allp = { first: first, days: saved, to: saved.length ? saved[saved.length - 1].date : ymd(first), limit: null,
+             more: false, offline: !live, loading: live, loadingMore: false, error: "", busy: false, again: false };
+    lastTouch = Date.now();
+    drawAll(true);
+    if (live) loadDays(first, PANEL_DAYS, "open");
+  }
+
+  function closeAll() {
+    allp = null;
+    var box = $("allup");
+    box.hidden = true;
+    box.textContent = "";
+  }
+
+  function loadDays(from, count, mode) {
+    // mode: "open" (first 30 days), "more" (the next 30) or "reload" (all so far, after a change).
+    // One request at a time; a reload asked for meanwhile runs when it finishes.
+    var p = allp;
+    var append = mode === "more";
+    allp.busy = true;
+    var failed = function () {
+      if (mode === "more") allp.error = "Couldn't load more just now. Try again in a moment.";
+      else if (mode === "reload") allp.error = "Couldn't refresh the list. Close it and open it again.";
+      else allp.offline = true;
+    };
+    fetchJson(apiUrl("/api/v1/display/days?from=" + ymd(from) + "&days=" + count)).then(function (r) {
+      if (allp !== p) return;
+      if (r.status === 200 && r.body && r.body.ok) {
+        allp.days = append ? allp.days.concat(r.body.days) : r.body.days;
+        allp.to = r.body.to;
+        allp.limit = r.body.limit;
+        allp.more = !!r.body.more;
+        allp.offline = false;
+        allp.error = "";
+      } else {
+        failed();
+      }
+    }).catch(function () {
+      if (allp === p) failed();
+    }).then(function () {
+      if (allp !== p) return;
+      allp.loading = false;
+      allp.loadingMore = false;
+      allp.busy = false;
+      drawAll(false);
+      if (allp.again) { allp.again = false; reloadAll(); }
+    });
+  }
+
+  function loadMore() {
+    if (!allp || allp.busy) return;
+    if (!canAct()) { allp.offline = true; drawAll(false); return; }
+    allp.loadingMore = true;
+    allp.error = "";
+    drawAll(false);
+    loadDays(addDays(parseLocal(allp.to), 1), PANEL_DAYS, "more");
+  }
+
+  function reloadAll() {
+    // After a move or delete, fetch again everything loaded so far, keeping the scroll.
+    if (!allp || allp.offline) return;
+    if (allp.busy) { allp.again = true; return; }
+    var count = Math.min(daysBetween(allp.first, parseLocal(allp.to)) + 1, PANEL_MAX_DAYS);
+    loadDays(allp.first, Math.max(count, 1), "reload");
+  }
+
+  function allRow(ev) {
+    var row = el("button", "arow" + (ev.info ? " info" : ""));
+    row.type = "button";
+    row.appendChild(el("div", "tm" + (ev.all_day ? " ad" : ""), ev.all_day ? "All day" : ev.time));
+    var bd = el("div", "bd");
+    var ti = el("span", "ti", ev.title);
+    if (ev.all_day && ev.day_count > 1) ti.appendChild(el("span", "u", " until " + ev.until));
+    bd.appendChild(ti);
+    bd.appendChild(tags(ev, true));
+    row.appendChild(bd);
+    row.addEventListener("click", function () { openDetails(ev); });
+    return row;
+  }
+
+  function allFooter(span) {
+    var f = el("div", "afoot");
+    var to = parseLocal(allp.to);
+    if (allp.loading) { f.appendChild(el("div", "say", "Loading…")); return f; }
+    if (allp.offline) {
+      f.appendChild(el("div", "say", "The saved schedule goes up to " + longDate(to) + "."));
+      f.appendChild(b("Can't load more right now", "b load off", null, { disabled: true, always: true }));
+      f.appendChild(el("div", "small", "It will work again once the calendar can be reached."));
+      return f;
+    }
+    if (!allp.more) { f.appendChild(el("div", "say", "That's everything for the next 12 months.")); return f; }
+    f.appendChild(el("div", "say", "That's everything through " + longDate(to) + "."));
+    var next = addDays(to, PANEL_DAYS);
+    var lim = allp.limit ? parseLocal(allp.limit) : null;
+    if (lim && next > lim) next = lim;
+    f.appendChild(b(allp.loadingMore ? "Loading…" : "Load " + PANEL_DAYS + " more days", "b load", loadMore,
+                    { icon: allp.loadingMore ? null : "down", disabled: allp.busy, always: true }));
+    if (allp.error) f.appendChild(el("div", "err", allp.error));
+    else f.appendChild(el("div", "small", "Through " + longDate(next)));
+    return f;
+  }
+
+  function drawAll(resetScroll) {
+    var box = $("allup");
+    if (!allp) { box.hidden = true; box.textContent = ""; return; }
+    var old = box.querySelector(".alist");
+    var top = old && !resetScroll ? old.scrollTop : 0;
+    box.textContent = "";
+    var to = parseLocal(allp.to);
+    var span = daysBetween(allp.first, to) + 1;
+
+    var card = el("div", "allp");
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-modal", "true");
+    card.setAttribute("aria-label", "Coming up");
+    var head = el("div", "ahead");
+    var words = el("div");
+    words.appendChild(el("div", "t", "Coming up"));
+    words.appendChild(el("div", "s", (allp.offline ? "Saved schedule · " : "Next " + span + " days · ")
+                                     + shortDate(allp.first) + " – " + shortDate(to)));
+    head.appendChild(words);
+    head.appendChild(el("div", "aside", "Closes by itself after a minute"));
+    head.appendChild(b("Close", "b primary", closeAll, { always: true }));
+    card.appendChild(head);
+
+    if (allp.offline) {
+      var at = lastOk ? new Date(lastOk) : null;
+      var when = !at ? "" : daysBetween(at, now()) === 0 ? clock(at) : DAYS[at.getDay()].slice(0, 3) + " " + clock(at);
+      var w = el("div", "warn");
+      w.appendChild(icon("warn"));
+      w.appendChild(document.createTextNode("Can't reach the calendar. Showing the saved schedule"
+        + (when ? " from " + when : "") + "; recent changes may be missing."));
+      card.appendChild(w);
+    }
+
+    var list = el("div", "alist");
+    var seen = {};   // a multi-day event shows once, on the first day it appears ("until Sun")
+    var any = false;
+    allp.days.forEach(function (day) {
+      var evs = day.events.filter(function (ev) {
+        var k = ev.id + "|" + ev.occ;
+        if (seen[k]) return false;
+        seen[k] = true;
+        return true;
+      });
+      var hols = day.holidays || [];
+      if (!evs.length && !hols.length) return;
+      any = true;
+      var d = parseLocal(day.date);
+      var row = el("div", "aday");
+      var dn = el("div", "dn");
+      var tomorrow = daysBetween(allp.first, d) === 0;
+      dn.appendChild(el("div", "w", tomorrow ? "Tomorrow" : DAYS[d.getDay()]));
+      dn.appendChild(el("div", "d", tomorrow ? shortDate(d) : MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate()));
+      row.appendChild(dn);
+      var evBox = el("div", "evs");
+      hols.forEach(function (h) {
+        var hr = el("div", "ahol");
+        hr.appendChild(el("div", "tm", "Holiday"));
+        hr.appendChild(el("div", "ti", h));
+        evBox.appendChild(hr);
+      });
+      evs.forEach(function (ev) { evBox.appendChild(allRow(ev)); });
+      row.appendChild(evBox);
+      list.appendChild(row);
+    });
+    if (!any && !allp.loading) {
+      list.appendChild(el("div", "aempty", allp.offline ? "Nothing more in the saved schedule."
+                                                         : "Nothing in the next " + span + " days."));
+    }
+    list.appendChild(allFooter(span));
+    card.appendChild(list);
+    box.appendChild(card);
+    box.hidden = false;
+    list.scrollTop = top;
+  }
+
   // ------------------------------------------------------------ sending
 
   function send(path, body, doneText) {
@@ -1197,6 +1400,7 @@
         toast(doneText);
         comingSig = "";
         refresh();
+        if (allp) reloadAll();
         return;
       }
       if (!ui) return;
@@ -1293,6 +1497,7 @@
   function tick() {
     // A panel left alone closes by itself; Coming up goes back to the top (D48).
     if (ui && !ui.busy && Date.now() - lastTouch > SHEET_IDLE_MS) closeSheet();
+    if (allp && !ui && !allp.loadingMore && Date.now() - lastTouch > SHEET_IDLE_MS) closeAll();
     var box = $("coming");
     if (box.scrollTop > 0 && Date.now() - Math.max(comingTouched, lastTouch) > TOP_RETURN_MS) {
       box.scrollTop = 0;
@@ -1335,6 +1540,8 @@
   $("sheet").addEventListener("click", onOverlayTap);
   $("add-btn").addEventListener("click", openAdd);
   $("health-btn").addEventListener("click", function () { openSheet({ mode: "health" }); });
+  $("coming-h").addEventListener("click", openAll);
+  $("allup").addEventListener("click", function (e) { if (e.target === $("allup")) closeAll(); });
   $("top-btn").addEventListener("click", function () { $("coming").scrollTop = 0; updateComingMore(); });
   $("coming").addEventListener("scroll", function () { comingTouched = Date.now(); updateComingMore(); }, { passive: true });
 

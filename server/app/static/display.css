@@ -298,3 +298,60 @@ html.kiosk, html.kiosk * { cursor: none !important; }
 /* Night (dark hours): fully black. A tap wakes the screen and never presses anything. */
 .night { position: fixed; inset: 0; background: #000; z-index: 10; cursor: none; }
 .head-btn.dim { opacity: 0.4; }
+
+/* Coming up panel (v0.6.2) --------------------------------------------------
+   Opened from the "Coming up · See all" heading. Sits under the details panel
+   (z-index 4 vs 5), so Close on the details comes back to the list. */
+.panel h2 .see-all { display: inline-flex; align-items: center; gap: 0.625rem; height: 3.375rem; padding: 0 1rem 0 1.125rem;
+  margin-left: -1.125rem; border: 2px solid #3A4456; border-radius: 0.75rem; background: transparent; color: var(--text-2);
+  font: inherit; font-size: 1.75rem; font-weight: 700; }
+.see-all .sa { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 1.25rem; color: var(--accent); }
+.see-all svg { width: 1.375rem; height: 1.375rem; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.see-all:active { background: #1E2430; }
+.overlay.allup { z-index: 4; padding: 1.25rem; align-items: stretch; }
+.allp { width: 100%; height: 100%; background: #1B2029; border: 2px solid #343C4A; border-radius: 1.375rem; color: var(--text);
+  display: flex; flex-direction: column; overflow: hidden; }
+.allp .ahead { flex: 0 0 auto; display: flex; align-items: center; gap: 1.25rem; padding: 1.375rem 1.875rem 1.125rem;
+  border-bottom: 2px solid #2C3340; }
+.allp .ahead .t { font-size: 2.5rem; font-weight: 700; line-height: 1.1; }
+.allp .ahead .s { font-size: 1.375rem; color: var(--text-3); }
+.allp .ahead .aside { margin-left: auto; font-size: 1.125rem; color: var(--text-4); text-align: right; }
+.allp .ahead .b { width: 11.25rem; padding: 0; }
+.allp .warn { flex: 0 0 auto; display: flex; align-items: center; gap: 0.875rem; margin: 0.875rem 1.875rem 0; padding: 0.75rem 1.125rem;
+  border-radius: 0.75rem; background: #3A2E12; border: 2px solid #F5A524; color: #FFE2A8; font-size: 1.375rem; font-weight: 700; }
+.allp .warn svg { flex: 0 0 auto; width: 1.625rem; height: 1.625rem; fill: none; stroke: #F5A524; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.alist { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 1.875rem;
+  -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-width: auto; scrollbar-color: #6B7383 #262C37; }
+.alist::-webkit-scrollbar { width: 10px; }
+.alist::-webkit-scrollbar-track { background: #262C37; border-radius: 5px; }
+.alist::-webkit-scrollbar-thumb { background: #6B7383; border-radius: 5px; }
+.aday { display: grid; grid-template-columns: 10.625rem minmax(0, 1fr); column-gap: 1.25rem; padding: 0.75rem 0; border-top: 2px solid #2C3340; }
+.aday:first-child { border-top: 0; }
+.aday .dn { padding-top: 0.625rem; display: flex; flex-direction: column; }
+.aday .dn .w { font-size: 1.625rem; font-weight: 700; color: #E3E6EB; }
+.aday .dn .d { font-size: 1.25rem; color: var(--text-3); }
+.aday .evs { display: flex; flex-direction: column; min-width: 0; }
+.arow { display: grid; grid-template-columns: 9.375rem minmax(0, 1fr); column-gap: 1.125rem; align-items: center; width: 100%;
+  text-align: left; padding: 0.625rem 0; border: 0; border-radius: 0.625rem; background: transparent; color: var(--text); font: inherit; }
+.arow:active { background: #232A36; }
+.arow .tm { font-size: 1.625rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.arow .tm.ad { color: var(--text-2); }
+.arow .bd { display: flex; flex-wrap: wrap; align-items: center; column-gap: 0.75rem; row-gap: 0.375rem; min-width: 0; }
+.arow .ti { font-size: 1.875rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.arow .ti .u { font-weight: 400; font-size: 1.375rem; color: var(--text-3); }
+.arow.info .ti { font-weight: 400; font-style: italic; font-size: 1.75rem; color: var(--text-2); }
+.arow .tags { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.arow .pill { font-size: 1.0625rem; padding: 0.125rem 0.75rem; }
+.arow .pill.category { padding: 0.125rem 0.75rem 0.125rem 0.625rem; }
+.arow .where { font-size: 1.1875rem; color: var(--text-3); }
+.ahol { display: grid; grid-template-columns: 9.375rem minmax(0, 1fr); column-gap: 1.125rem; align-items: center; min-height: 3.25rem; padding: 0.375rem 0; }
+.ahol .tm { font-size: 1.375rem; font-weight: 700; color: var(--text-4); }
+.ahol .ti { font-size: 1.625rem; font-style: italic; color: var(--text-3); }
+.afoot { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.625rem 0 1.5rem; border-top: 2px solid #2C3340; text-align: center; }
+.afoot .say { font-size: 1.375rem; color: var(--text-3); }
+.afoot .small { font-size: 1.1875rem; color: var(--text-4); }
+.afoot .err { font-size: 1.375rem; font-weight: 700; color: #FFB4B4; }
+.afoot .b.load { width: 30rem; height: 4.5rem; font-size: 1.75rem; border: 2px solid #4A5468; }
+.afoot .b.load.off { background: #222834; color: #7D8594; border: 2px dashed #3A4252; opacity: 1; }
+.aempty { padding: 2.5rem 0; font-size: 1.75rem; color: var(--text-3); text-align: center; }
+

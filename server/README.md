@@ -246,6 +246,27 @@ pulls a finished image (`pull_policy: always`).
   `versions`, `set_up`). The server notes when the real display last fetched
   the schedule (not test-clock requests).
 
+## Coming up panel (v0.6.2)
+
+- On the shelf, the **Coming up · See all** heading opens a panel of the next
+  30 days, from tomorrow, by day (today stays in the Today panel). Holidays
+  show as quiet lines; household reminders aren't listed. A multi-day event
+  shows once, on its first day ("until Sun").
+- **Load 30 more days** at the end adds 30 days at a time, up to 12 months
+  ahead ("That's everything for the next 12 months").
+- Tapping an item opens the usual details panel over the list (Move, Delete);
+  Close comes back to the list, and a change refreshes it. The panel closes by
+  itself after a minute untouched, and at dark hours.
+- When the server can't be reached, the panel shows only the saved schedule
+  (Upcoming range plus 7 days) with an amber note, and the button reads
+  "Can't load more right now" — never "nothing more".
+- `GET /api/v1/display/days?from=YYYY-MM-DD&days=N` (default 30; 1–366):
+  `from`, `to`, `limit` (today + 365 days), `more`, and `days` in the same shape
+  as the main schedule's. `from` must be today to the limit; the range is cut
+  at the limit. Errors: 400 `bad_request`, `bad_from`, `bad_days`, `bad_now`;
+  404 for another API version. Additive: `/api/v1/display` is unchanged, and
+  these requests don't count as display contact on the Health page.
+
 ## Quick titles and Recently deleted (editor)
 
 - **Quick titles** (Settings → Quick titles): the one-tap titles on the

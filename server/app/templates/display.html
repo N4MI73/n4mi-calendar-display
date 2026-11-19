@@ -42,9 +42,10 @@
       </div>
       <div id="today" class="today-list"></div>
     </section>
-    <section class="panel coming" aria-labelledby="coming-h">
+    <section class="panel coming" aria-labelledby="coming-title">
       <div class="panel-head">
-        <h2 id="coming-h">Coming up</h2>
+        <!-- v0.6.2: the heading opens the Coming up panel (30 days, "Load more"). -->
+        <h2 id="coming-title"><button type="button" id="coming-h" class="see-all">Coming up<span class="sa">See all<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"></path></svg></span></button></h2>
         <button type="button" id="top-btn" class="head-btn" hidden>Back to top</button>
       </div>
       <div id="coming" class="coming-list"></div>
@@ -63,6 +64,8 @@
   <p id="message-text">Loading the calendar…</p>
 </div>
 
+<!-- v0.6.2: the Coming up panel; details open over it and Close comes back to it. -->
+<div id="allup" class="overlay allup" hidden></div>
 <!-- Phase 4: details, delete, move and add open in this panel over the screen. -->
 <div id="sheet" class="overlay" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
