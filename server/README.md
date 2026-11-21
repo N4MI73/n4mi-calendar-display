@@ -73,6 +73,20 @@ pulls a finished image (`pull_policy: always`).
   `calendar.db.pre-v<N>-<timestamp>.bak`.
 - The host's nightly backup copies the database. Test one restore after the
   first nightly backup has run.
+- **Download a backup (v0.6.3):** Settings → Backup → **Download a backup**
+  (`GET /settings/backup`) gives a consistent copy of the whole database as
+  `calendar-backup-YYYY-MM-DD-HHMM.db`, made with SQLite's backup method. Keep
+  it private: it holds the household's events.
+- **Putting a backup back** (on the host, deliberately; there's no restore button):
+  1. In Portainer, **stop** the stack.
+  2. On the host, keep the current file aside:
+     `mv /srv/docker/n4mi-calendar-display/data/calendar.db /srv/docker/n4mi-calendar-display/data/calendar.db.before-restore`
+  3. Copy the backup in as `calendar.db` in that folder, owned by uid 1000
+     (`sudo chown 1000:1000 calendar.db`).
+  4. **Start** the stack. If the backup is from an older version, the app
+     upgrades it at start-up (and writes its usual `.pre-v<N>` copy first).
+  5. Check `/api/status` (`"ok":true`, the expected event count) and the shelf.
+     Remove `calendar.db.before-restore` once you're satisfied.
 - Never commit a database, export or backup to this repository.
 
 ## Repeating events and reminders

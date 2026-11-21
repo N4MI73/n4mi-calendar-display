@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -21,11 +22,12 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from fastapi.templating import Jinja2Templates
 
 from . import db, display, google_links, health, holidays, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.6.3"
 BASE_DIR = Path(__file__).parent
 
 
@@ -1467,7 +1469,38 @@ def create_app(db_path: str | None = None) -> FastAPI:
             c.close()
         return redirect("/settings", "Settings saved.")
 
+    # ------------------------------------------------------------ backup (v0.6.3)
+
+    @app.get("/settings/backup")
+    def settings_backup():
+        """Download a consistent copy of the whole calendar as one SQLite file.
+
+        Made with SQLite's own backup method, like the host's nightly backup, so
+        it is never a half-written copy. The temporary file is removed after it
+        has been sent. Restoring is done on the server (server/README.md).
+        """
+        fd, tmp = tempfile.mkstemp(prefix="calendar-backup-", suffix=".db")
+        os.close(fd)
+        src = conn()
+        dst = sqlite3.connect(tmp)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        name = "calendar-backup-" + timeutil.now_local().strftime("%Y-%m-%d-%H%M") + ".db"
+        return FileResponse(tmp, media_type="application/vnd.sqlite3", filename=name,
+                            headers={"Cache-Control": "no-store"},
+                            background=BackgroundTask(_remove_quietly, tmp))
+
     return app
+
+
+def _remove_quietly(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 app = create_app() if os.environ.get("CAL_NO_AUTOAPP") != "1" else None
