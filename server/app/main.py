@@ -27,7 +27,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db, display, google_links, health, holidays, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "0.6.3"
+APP_VERSION = "0.6.4"
 BASE_DIR = Path(__file__).parent
 
 
@@ -1234,6 +1234,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return redirect("/import/not-in-google", "It's back on the list.")
 
     # ------------------------------------------------- holidays (D59)
+
+    @app.get("/tips", response_class=HTMLResponse)
+    def tips_page(request: Request):
+        """Plain help by task (v0.6.4); linked from Settings → More."""
+        return render(request, "tips.html")
 
     @app.get("/holidays", response_class=HTMLResponse)
     def holidays_page(request: Request):

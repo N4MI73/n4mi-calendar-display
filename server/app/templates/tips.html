@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set active = 'settings' %}
+{% block title %}Tips{% endblock %}
+{% block content %}
+<h1>Tips</h1>
+<p>How to do the things that aren't obvious, by task. Each tip says where to go.</p>
+
+<h2>Something every Friday except the first</h2>
+<p>In <a href="/events/new">Add event</a>, choose <b>Repeats: Monthly, by weekday (1st Tue…)</b>, pick <b>Friday</b>, and tick <b>2nd, 3rd, 4th</b> and <b>5th</b> (leave 1st and Last unticked). For the thing that happens on the 1st Friday instead, make a second event with only <b>1st</b> ticked.</p>
+
+<h2>Skip or move one date of a repeating event</h2>
+<p>On the <a href="/">Events</a> list, open that date's entry. <b>Change this date</b> moves it or changes its time, place or notes; <b>Skip this date</b> takes that one date off. The rest of the series stays as it was. To undo, open the series with <b>Edit the whole series</b> and use <b>Put back as normal</b> beside the date.</p>
+<p>On the shelf, <b>Move</b> and <b>Delete</b> on a repeating event also affect that one date only.</p>
+
+<h2>Change a repeating event from a date onward</h2>
+<p>Open the first date that should change and choose <b>Change from this date on</b> (or <b>Delete from this date on</b>). Earlier dates keep their old details, so the history stays right. <b>Edit the whole series</b> changes every date, past ones included.</p>
+
+<h2>Be reminded days ahead, such as for birthdays</h2>
+<p>In <a href="/categories">Categories</a>, open the category (for example Birthday) and set <b>Reminder for all-day events, such as birthdays</b>, for example 2 days. The shelf then shows "Kate's birthday is Thursday", then "Kate's birthday is tomorrow", then "Kate's birthday today". One setting covers every event in that category. A single event can still use its own reminder, or none, in its event form.</p>
+
+<h2>Household reminders: "I did it"</h2>
+<p>In <a href="/reminders">Reminders</a>, each reminder has two choices for when it isn't done:</p>
+<ul>
+  <li><b>Take it off the display at the end of the day</b>: for things that only matter that day, like the garbage cans.</li>
+  <li><b>Keep showing it until someone taps "I did it"</b>: for things that must not be forgotten, like the A/C filters. It never shows twice, even if the next one comes round first.</li>
+</ul>
+<p>Choose <b>Doesn't repeat</b> for a one-time reminder, such as calling the plumber; once done, it's finished for good. On the shelf, "I did it" gives a few seconds to Undo.</p>
+
+<h2>One-tap titles on the shelf's Add form</h2>
+<p>In <a href="/quick-titles">Quick titles</a>, keep the titles the household adds most (up to about 10). Each can also pick a category. <b>Suggest from my events</b> lists titles you use often.</p>
+
+<h2>Get back something deleted</h2>
+<p>Anything deleted, here or on the shelf, stays in <a href="/recently-deleted">Recently deleted</a> for 3 days (the last 20 deletions). Use <b>Restore</b> to put it back.</p>
+
+<h2>Google import</h2>
+<ul>
+  <li><a href="/import">Import</a> → <b>Fetch from Google</b> only reads Google; nothing is ever changed there. Nothing reaches the calendar until you add it in the review.</li>
+  <li><b>Title rules</b> on the import source page set the category and people for new events whose title contains a word, for example "birthday".</li>
+  <li><a href="/import/not-in-google">Not in Google</a> lists events added here that aren't in Google yet. <b>Add to Google</b> opens Google with the details filled in; you press Save there. <b>Not needed in Google</b> takes an event off the list for good.</li>
+</ul>
+
+<h2>Keep a copy of the calendar</h2>
+<p>The server copies the calendar every night. For an extra copy of your own, use <a href="/settings">Settings</a> → <b>Download a backup</b>. Keep the file private: it holds the household's events.</p>
+
+<h2>If the shelf looks wrong</h2>
+<ul>
+  <li><b>Amber bar "Not updated since…"</b>: the shelf can't reach the calendar. It keeps showing the last schedule it received; adding, moving and deleting wait until it's back.</li>
+  <li><b>Health button amber or red</b>: tap it to see which reading needs attention. The full detail is on the <a href="/health">Health</a> page.</li>
+  <li><b>Black screen</b>: it's probably dark hours; a touch wakes it. Dark hours are in <a href="/settings">Settings</a>.</li>
+</ul>
+{% endblock %}
