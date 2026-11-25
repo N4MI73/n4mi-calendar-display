@@ -27,8 +27,9 @@ your favourite AI agent.
 
 ## Status
 
-**Version 1.0** (November 2026), in daily use by one household since late
-October 2026:
+**Version 1.1** (November 2026), in daily use by one household since late
+October 2026. Version 1.1 adds an **Out of town** marker for events away from
+home, with an earlier reminder for them.
 
 - **Editor:** events with one or more people, a category and an optional
   location; repeating events with single dates skipped or changed, or changed
@@ -37,12 +38,14 @@ October 2026:
   Tips page; a backup download. Works on a phone.
 - **Shelf display:** Today, Coming up (with a See all panel reaching up to 12
   months ahead), reminder banners, "I did it" with Undo, add, move and delete
-  on the touch screen, an offline copy with a clear stale indicator, night
+  on the touch screen, an "Out of town" tag on events away from home, an
+  offline copy with a clear stale indicator, night
   mode with the screen fully off, and a health button with Restart and Shut
   down.
 - **Google import:** read-only, started by hand, reviewed before anything
   changes; a "Not in Google" list with a pre-filled Add to Google link; US
-  holidays calculated on the server.
+  holidays calculated on the server; a new place asks "Local or out of town?"
+  once and remembers the answer.
 - **Raspberry Pi:** kiosk and helper as systemd user services, read-only file
   system, tested through repeated power cuts and an unattended week.
 

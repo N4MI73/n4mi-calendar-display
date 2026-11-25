@@ -25,7 +25,8 @@ for you and your agent is at the end of this page.
   "Garbage cans to the curb" every Monday), and a quiet "Nothing scheduled
   today" only when that's really true. If it can't reach the server it keeps
   showing the last schedule with a clear "Not updated since…" bar. At night it
-  goes fully dark; a touch wakes it.
+  goes fully dark; a touch wakes it. Events away from home carry an "Out of
+  town" tag and are reminded a few days earlier (5 to begin with).
 - **Simple actions on the touch screen:** add (with one-tap titles and its own
   large-key keyboard), move, delete, tick off reminders, and **Coming up · See
   all** for the next 30 days and beyond.
@@ -37,7 +38,9 @@ for you and your agent is at the end of this page.
   categories and colours; settings; a Tips page; a backup download.
 - **Google import (optional):** reads a Google calendar's private iCal address
   when you press Fetch, and lists what's new or changed for you to review.
-  Nothing is merged, deleted or written to Google on its own. A "Not in
+  Nothing is merged, deleted or written to Google on its own. For a place it
+  hasn't seen, it asks once whether it's local or out of town; towns on your
+  local towns list never ask. A "Not in
   Google" list helps you copy events the other way by hand.
 
 | The See all panel | Event details on the shelf | The editor on a phone |
