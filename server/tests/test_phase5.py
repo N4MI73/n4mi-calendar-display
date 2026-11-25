@@ -59,6 +59,9 @@ class Base(unittest.TestCase):
         self.conn = db.connect(self.db_path)
         self.alex = store.save_person(self.conn, "Alex", "#4C9AFF")
         self.robin = store.save_person(self.conn, "Robin", "#F06BA8")
+        # v1.1: these feeds' made-up places count as local, so these tests keep testing
+        # what they were written for; Out of town at import is tested in test_out_of_town.py.
+        store.add_local_town(self.conn, "Lakeside")
         os.environ["CAL_SOURCE_1_URL"] = SECRET
         self.feed = feed(DENTIST, CLUB, CLUB_PARTY, BIRTHDAY, TRIP, OLD, FAR)
 

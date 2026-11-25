@@ -238,3 +238,32 @@ select.unit { width: auto; min-height: 44px; }
 .health-badge.lv-none { background: #3A4252; color: #E3E6EB; }
 .health-badge.lv-old { background: #3A4252; color: #E3E6EB; }
 code { font-size: 0.85rem; overflow-wrap: anywhere; }
+
+/* v1.1: the Out of town tag, as on the shelf: outlined, square corners, a car icon, never colour alone. */
+.oot-tag {
+  display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle;
+  font-size: 0.85rem; font-weight: 700; line-height: 1.3;
+  padding: 0.05rem 0.5rem 0.05rem 0.35rem;
+  border: 2px solid #E3E6EB; border-radius: 6px; color: var(--text); white-space: nowrap;
+}
+.oot-tag svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.oot-field { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.6rem 0.9rem 0.7rem; }
+.oot-field legend { padding: 0 0.3rem; }
+.place-ask fieldset {
+  margin: 0.5rem 0 0; padding: 0.5rem 0.8rem 0.7rem; border: 1px solid #6B5A1F; border-radius: 10px; background: #2A2410;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+}
+.place-ask legend { font-weight: 700; padding: 0 0.3rem; }
+.place-ask p { flex: 1 1 100%; margin: 0; }
+.place-note { margin: 0.3rem 0 0; }
+.town-list { list-style: none; margin: 0 0 0.6rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.town-list li { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0 0.2rem 0 0.8rem; min-height: 44px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2); }
+.town-list form { margin: 0; }
+.row-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0 0 1rem; }
+.row-form input { flex: 1 1 12rem; max-width: 18rem; margin: 0; }
+.place-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.place-list .place-name { flex: 1 1 14rem; }
+.place-list .place-answer { font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

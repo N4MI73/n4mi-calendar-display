@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_oot.html" import oot_tag %}
 {% set active = 'import' %}
 {% block title %}Review import{% endblock %}
 {% block content %}
@@ -10,7 +11,7 @@
 {% if groups.new %}
 <section>
   <h2>New in Google ({{ groups.new|length }})</h2>
-  <p class="hint">Tick the ones to add with this source's default people and category, or open one to check it first. Skipped events aren't offered again.</p>
+  <p class="hint">Tick the ones to add with this source's default people and category, or open one to check it first. Skipped events aren't offered again. An event asking “Local or out of town?” is added once you've answered.</p>
   <form method="post" action="/import/review/add-ticked" class="form" id="addform">
     <p><button type="button" class="btn btn-quiet btn-small" onclick="document.querySelectorAll('#addform input[name=item]').forEach(function(c){c.checked=true})">Tick all</button>
        <button type="button" class="btn btn-quiet btn-small" onclick="document.querySelectorAll('#addform input[name=item]').forEach(function(c){c.checked=false})">Untick all</button></p>
@@ -20,6 +21,18 @@
     <li class="list-row import-row">
       <label class="choice"><input type="checkbox" name="item" value="{{ it.id }}" form="addform"> <span><span class="title">{{ it.g.title }}</span><br><span class="meta">{{ it.when }}{% if it.g.location %} · {{ it.g.location }}{% endif %}</span>
       {% if it.overlaps %}<br><span class="meta">Overlaps: {{ it.overlaps|join(', ') }}</span>{% endif %}</span></label>
+      {% if it.place %}{% if it.place.state == 'ask' %}
+      <form method="post" action="/import/items/{{ it.id }}/place" class="place-ask">
+        <fieldset>
+          <legend>Local or out of town?</legend>
+          <p class="meta">New place: <strong>{{ it.g.location }}</strong>. Your answer is remembered for this place.</p>
+          <button class="btn btn-small" type="submit" name="answer" value="local">Local</button>
+          <button class="btn btn-small" type="submit" name="answer" value="out">Out of town</button>
+        </fieldset>
+      </form>
+      {% elif it.place.why == 'town' %}<p class="meta place-note">Local: {{ it.place.town }} is on your local towns list.</p>
+      {% elif it.place.why == 'remembered' %}<p class="meta place-note">{% if it.place.state == 'out' %}{{ oot_tag() }} {% else %}Local: {% endif %}your earlier answer for this place.</p>
+      {% endif %}{% endif %}
       <a class="btn btn-small" href="/import/items/{{ it.id }}/add">Review and add</a>
       <form method="post" action="/import/items/{{ it.id }}/skip" class="inline"><button class="btn btn-quiet btn-small" type="submit">Skip</button></form>
     </li>

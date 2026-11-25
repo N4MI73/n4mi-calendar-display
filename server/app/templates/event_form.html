@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_repeat.html" import repeat_fields %}
 {% from "_lead.html" import unit_select %}
+{% from "_oot.html" import oot_tag %}
 {% set active = 'events' %}
 {% block title %}{{ 'Edit event' if event_id else 'Add event' }}{% endblock %}
 {% block content %}
@@ -102,6 +103,21 @@
     <input id="location" name="location" type="text" maxlength="200" value="{{ form.location }}" placeholder="Dr. Smith, 123 Main St">
     {% if errors.location %}<p class="err">{{ errors.location }}</p>{% endif %}
   </div>
+
+  <fieldset class="field oot-field">
+    <legend>Out of town</legend>
+    <label class="choice inline">
+      <input type="checkbox" id="out_of_town" name="out_of_town" value="1" {% if form.out_of_town %}checked{% endif %}>
+      Away from home
+    </label>
+    <p class="hint">Shows {{ oot_tag(hidden=true) }} on the shelf. Leave it off for home or nearby.{% if form.repeat != 'none' %} For a repeating event it applies to every date.{% endif %}
+    {% if oot_days %}With the category's reminder, an out-of-town event is reminded at least {{ oot_days }} day{{ '' if oot_days == 1 else 's' }} ahead (<a href="/settings#out-of-town">Settings</a>).{% endif %}</p>
+    {% if import_item and import_item.place %}
+      {% if import_item.place.state == 'ask' %}<p class="hint"><strong>New place.</strong> Your choice here is remembered for “{{ import_item.g.location }}” at later imports.</p>
+      {% elif import_item.place.why == 'remembered' %}<p class="hint">Filled in from your earlier answer for this place.</p>
+      {% elif import_item.place.why == 'town' %}<p class="hint">Local: {{ import_item.place.town }} is on your local towns list.</p>{% endif %}
+    {% endif %}
+  </fieldset>
 
   <fieldset class="field {% if errors.reminder %}has-error{% endif %}">
     <legend>Reminder on the display</legend>

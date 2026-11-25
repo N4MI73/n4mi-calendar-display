@@ -128,8 +128,9 @@ In the editor:
    Travel, Club / Ham radio, Info, Other). Rename, recolour or add your own,
    and set each one's default reminder.
 3. **Settings:** night (dark) hours, how far ahead "Coming up" looks and the
-   title shown on the display; under Settings → More, which US holidays to
-   show (or none).
+   title shown on the display; under Out of town, replace the **Local towns**
+   (it starts with the builder's own towns in Georgia) with yours; under
+   Settings → More, which US holidays to show (or none).
 4. **Events and reminders:** add a few, then open
    `http://SERVER-ADDRESS:8087/display` in a browser to see the shelf view.
 5. **Phone:** open the editor on your phone and use "Add to Home Screen" for

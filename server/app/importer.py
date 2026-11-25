@@ -7,8 +7,11 @@ The rules (decisions D5, D39, D54–D58):
   a snapshot of Google's version as last accepted, so a later fetch can tell
   "changed in Google" (Google differs from the snapshot) from "edited here"
   (this calendar differs from the snapshot).
-- People, category and reminder are this calendar's own and are never touched
-  by an import.
+- People, category, reminder and Out of town are this calendar's own and are
+  never touched by an import.
+- v1.1: a new event's place decides Out of town: an answer Dan gave before for
+  that place, no location (local), a local town named in it (local), or else
+  the review asks "Local or out of town?" and remembers the answer per place.
 - The calendar's private address comes from the Portainer variable
   CAL_SOURCE_<slot>_URL and is never stored, shown or logged.
 """
@@ -417,13 +420,13 @@ def _attach(conn, event_id: int, slot: int, g: dict, imported: bool) -> None:
     conn.execute("DELETE FROM import_skips WHERE slot = ? AND uid = ?", (slot, g["uid"]))
 
 
-def _create(conn, slot: int, g: dict, people: list[int], category_id: int) -> int:
+def _create(conn, slot: int, g: dict, people: list[int], category_id: int, out_of_town: bool = False) -> int:
     now = _now()
     cur = conn.execute(
         "INSERT INTO events (title, location, notes, all_day, start_local, end_local, category_id, reminder_mode,"
-        " rrule, recurrence_end, created, updated) VALUES (?,?,?,?,?,?,?,'default',?,?,?,?)",
+        " rrule, recurrence_end, out_of_town, created, updated) VALUES (?,?,?,?,?,?,?,'default',?,?,?,?,?)",
         (g["title"], g["location"] or None, g["notes"] or None, 1 if g["all_day"] else 0, g["start_local"],
-         g["end_local"], category_id, g["rrule"], g["recurrence_end"], now, now),
+         g["end_local"], category_id, g["rrule"], g["recurrence_end"], 1 if out_of_town else 0, now, now),
     )
     eid = cur.lastrowid
     conn.executemany("INSERT INTO event_people (event_id, person_id) VALUES (?, ?)", [(eid, p) for p in people])
@@ -432,19 +435,53 @@ def _create(conn, slot: int, g: dict, people: list[int], category_id: int) -> in
     return eid
 
 
+def place_status(conn: sqlite3.Connection, it: dict, cfg: dict | None = None) -> dict:
+    """Local or out of town for a review item's place (v1.1); see store.place_status."""
+    return store.place_status(conn, (it.get("g") or {}).get("location"), cfg)
+
+
+def waiting_for_answer(conn: sqlite3.Connection, item_ids: list[int]) -> int:
+    """How many of these new items still need "Local or out of town?" answered."""
+    cfg = store.get_config(conn)
+    n = 0
+    for iid in item_ids:
+        it = get_item(conn, iid)
+        if it and it["kind"] == "new" and place_status(conn, it, cfg)["state"] == "ask":
+            n += 1
+    return n
+
+
+def answer_place(conn: sqlite3.Connection, item_id: int, out_of_town: bool) -> str:
+    """Dan's answer to "Local or out of town?" for an item's place, remembered for later imports."""
+    it = get_item(conn, item_id)
+    location = (it or {}).get("g", {}).get("location") if it else None
+    if not it or it["kind"] != "new" or not store.place_key(location):
+        raise ImportError_("That item has already been dealt with.")
+    store.remember_place(conn, location, out_of_town)
+    return location
+
+
 def add_with_defaults(conn: sqlite3.Connection, item_ids: list[int]) -> int:
-    """Add the ticked new events using each source's default people and category (D55)."""
+    """Add the ticked new events using each source's default people and category (D55).
+
+    v1.1: an event whose place still needs "Local or out of town?" is left
+    waiting (see waiting_for_answer); the others take their place's answer.
+    """
     added = 0
+    cfg = store.get_config(conn)
     try:
         for iid in item_ids:
             it = get_item(conn, iid)
             if not it or it["kind"] != "new":
                 continue
+            where = place_status(conn, it, cfg)
+            if where["state"] == "ask":
+                continue
             people, cat = defaults_for(conn, it["slot"], it["g"]["title"])
             if not people or not cat:
                 raise ImportError_(f"“{it['g']['title']}” has no default people or category. Set the source's "
                                    "defaults (Import → Change), or use “Review and add” for it.")
-            _create(conn, it["slot"], it["g"], people, cat)
+            _create(conn, it["slot"], it["g"], people, cat, out_of_town=where["state"] == "out")
             _drop(conn, iid)
             added += 1
         conn.commit()
@@ -466,6 +503,7 @@ def form_for_item(conn: sqlite3.Connection, it: dict) -> store.EventInput:
         start_date=start.strftime(timeutil.DATE_FMT), start_time="" if g["all_day"] else start.strftime("%H:%M"),
         end_date=end.strftime(timeutil.DATE_FMT), end_time="" if g["all_day"] else end.strftime("%H:%M"),
         category_id=str(cat or ""), person_ids=[str(x) for x in people],
+        out_of_town=place_status(conn, it)["state"] == "out",
         repeat=p.repeat, interval=p.interval, weekdays=p.weekdays, ordinals=p.ordinals,
         nth_weekday=p.nth_weekday, until=p.until, custom_rrule=p.custom_rrule,
     )
@@ -476,7 +514,11 @@ def add_reviewed(conn: sqlite3.Connection, item_id: int, form: store.EventInput)
     it = get_item(conn, item_id)
     if not it or it["kind"] != "new":
         raise ImportError_("That item has already been dealt with.")
+    unanswered = place_status(conn, it)["state"] == "ask"
     eid = store.save_event(conn, form)
+    if unanswered:
+        # The tick box in the reviewed form is the answer for this place (v1.1).
+        store.remember_place(conn, it["g"]["location"], form.out_of_town, commit=False)
     try:
         ev = store.get_event(conn, eid)
         if ev["rrule"]:

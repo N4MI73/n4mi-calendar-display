@@ -34,6 +34,7 @@ class Base(unittest.TestCase):
         self.conn = db.connect(self.db_path)
         self.alex = store.save_person(self.conn, "Alex", "#4C9AFF")
         self.robin = store.save_person(self.conn, "Robin", "#F06BA8")
+        store.add_local_town(self.conn, "Lakeside")   # v1.1: the feeds' made-up place counts as local
         os.environ["CAL_SOURCE_1_URL"] = p5.SECRET
 
     def tearDown(self):

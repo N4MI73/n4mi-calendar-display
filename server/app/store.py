@@ -44,6 +44,9 @@ DEFAULT_CONFIG = {
     "health_contact_alert": "30",
     "health_clock_check": "60",
     "health_tell": "",
+    # v1.1: Out of town (the reminder in days, 0 = no longer reminder; local towns as a JSON list).
+    "oot_reminder_days": "5",
+    "local_towns": json.dumps(["Grovetown", "Evans", "Augusta", "Martinez", "North Augusta"]),
 }
 
 # Suggested colors for new people, in order; the first one not yet used is offered.
@@ -277,6 +280,7 @@ class EventInput:
     reminder_mode: str = "default"
     reminder_minutes: str = ""   # the amount, in reminder_unit (kept under this name for older callers)
     reminder_unit: str = "minutes"
+    out_of_town: bool = False    # v1.1: away from home; set once for the whole series
     # Repeats (Phase 2). See recurrence.Pattern.
     repeat: str = "none"
     interval: str = "1"
@@ -437,6 +441,7 @@ def validate_event(conn: sqlite3.Connection, data: EventInput) -> dict:
         "reminder_minutes": reminder_minutes,
         "rrule": rrule,
         "recurrence_end": recurrence_end,
+        "out_of_town": 1 if data.out_of_town else 0,
     }
 
 
@@ -445,6 +450,7 @@ def _event_cols(clean: dict) -> tuple:
         clean["title"], clean["location"], clean["notes"], clean["all_day"],
         clean["start_local"], clean["end_local"], clean["category_id"],
         clean["reminder_mode"], clean["reminder_minutes"], clean["rrule"], clean["recurrence_end"],
+        clean["out_of_town"],
     )
 
 
@@ -452,8 +458,8 @@ def _insert_event(conn: sqlite3.Connection, clean: dict, now: str) -> int:
     """Insert a validated event and its people. The caller commits."""
     cur = conn.execute(
         "INSERT INTO events (title, location, notes, all_day, start_local, end_local, category_id,"
-        " reminder_mode, reminder_minutes, rrule, recurrence_end, created, updated)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " reminder_mode, reminder_minutes, rrule, recurrence_end, out_of_town, created, updated)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         _event_cols(clean) + (now, now),
     )
     conn.executemany(
@@ -475,7 +481,7 @@ def save_event(conn: sqlite3.Connection, data: EventInput, event_id: int | None 
         else:
             conn.execute(
                 "UPDATE events SET title=?, location=?, notes=?, all_day=?, start_local=?, end_local=?,"
-                " category_id=?, reminder_mode=?, reminder_minutes=?, rrule=?, recurrence_end=?, updated=?,"
+                " category_id=?, reminder_mode=?, reminder_minutes=?, rrule=?, recurrence_end=?, out_of_town=?, updated=?,"
                 " locally_modified = CASE WHEN source = 'google' THEN 1 ELSE locally_modified END"
                 " WHERE id=?",
                 cols + (now, event_id),
@@ -839,12 +845,21 @@ def occurrence_to_input(occ: dict) -> OccurrenceInput:
     )
 
 
-def effective_reminder_minutes(event: dict) -> int | None:
+INFO_CATEGORY = "info"   # other people's events: never given the longer out-of-town reminder
+
+
+def effective_reminder_minutes(event: dict, oot_days: int = 0) -> int | None:
     """Minutes before the start that the banner should appear, or None (D27, D43, D44).
 
     Timed events use the category's default unless the event says otherwise.
     All-day events use the category's all-day default (whole days, D44), so an
     all-day event has no reminder unless that default or the event sets one.
+
+    v1.1: an out-of-town event that uses its category's default gets the longer
+    of that default and `oot_days` (the Settings value; 0 = off). A category with
+    no default counts as shorter, so an out-of-town all-day event still gets its
+    reminder, except in the Info category (other people's events), which stays
+    as it is. A custom reminder or "No reminder" always wins.
     """
     if event["reminder_mode"] == "none":
         return None
@@ -852,8 +867,23 @@ def effective_reminder_minutes(event: dict) -> int | None:
         return event["reminder_minutes"]
     if event["all_day"]:
         days = event.get("category_allday_days")
-        return None if days is None else days * 1440
-    return event.get("category_reminder")
+        base = None if days is None else days * 1440
+    else:
+        base = event.get("category_reminder")
+    if event.get("out_of_town") and oot_days > 0 \
+            and (event.get("category_name") or "").strip().lower() != INFO_CATEGORY:
+        longer = oot_days * 1440
+        if base is None or longer > base:
+            return longer
+    return base
+
+
+def oot_days(cfg: dict) -> int:
+    """The out-of-town reminder in days from the settings (0 if unset or unreadable)."""
+    try:
+        return max(0, int(cfg.get("oot_reminder_days", "0")))
+    except (TypeError, ValueError):
+        return 0
 
 
 def event_to_input(event: dict) -> EventInput:
@@ -874,6 +904,7 @@ def event_to_input(event: dict) -> EventInput:
         reminder_mode=event["reminder_mode"],
         reminder_minutes=split_minutes(event["reminder_minutes"])[0],
         reminder_unit="days" if event["all_day"] else split_minutes(event["reminder_minutes"])[1],
+        out_of_town=bool(event.get("out_of_town")),
         **_pattern_fields(recurrence.pattern_from_rrule(event["rrule"], event["recurrence_end"], start.date())),
     )
 
@@ -1097,6 +1128,8 @@ def save_config(conn: sqlite3.Connection, form: dict[str, str]) -> dict[str, str
             clean[key] = raw
         else:
             errors[key] = "Enter a time such as 23:00."
+    if "oot_reminder_days" in form:
+        int_field("oot_reminder_days", 0, MAX_REMINDER_DAYS, "the number of days")
     if "display_title" in form:
         title = _clean(form.get("display_title"))
         if len(title) > 40:
@@ -1176,8 +1209,9 @@ _EVENT_COPY_COLS = (
     "title", "location", "notes", "all_day", "start_local", "end_local", "category_id", "reminder_mode",
     "reminder_minutes", "rrule", "recurrence_end", "source", "google_source", "google_uid", "google_last_seen",
     "locally_modified", "created", "updated", "added_on_shelf", "google_snapshot", "not_needed_in_google",
+    "out_of_town",
 )
-_FLAG_COLS = ("added_on_shelf", "not_needed_in_google")   # older snapshots may lack these: 0
+_FLAG_COLS = ("added_on_shelf", "not_needed_in_google", "out_of_town")   # older snapshots may lack these: 0
 
 
 def restore_deleted(conn: sqlite3.Connection, entry_id: int, now: datetime | None = None) -> str:
@@ -1430,4 +1464,103 @@ def save_holidays(conn: sqlite3.Connection, on: bool, keys: list[str]) -> None:
         "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         [("holidays_on", "1" if on else "0"), ("holidays", ",".join(chosen))],
     )
+    conn.commit()
+
+
+# ------------------------------------------------ Out of town (v1.1)
+
+MAX_TOWN = 60
+MAX_TOWNS = 40
+
+
+def local_towns(cfg: dict) -> list[str]:
+    """The local towns from the settings: a new Google place naming one counts as local."""
+    try:
+        towns = json.loads(cfg.get("local_towns") or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [t for t in towns if isinstance(t, str) and t.strip()]
+
+
+def _save_towns(conn: sqlite3.Connection, towns: list[str]) -> None:
+    conn.execute("INSERT INTO config (key, value) VALUES ('local_towns', ?)"
+                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(towns),))
+    conn.commit()
+
+
+def add_local_town(conn: sqlite3.Connection, town: str) -> str:
+    """Add a town to the list. Returns the name as stored; raises ValidationError."""
+    town = " ".join(_clean(town).split())
+    if not town:
+        raise ValidationError({"town": "Enter a town."})
+    if len(town) > MAX_TOWN:
+        raise ValidationError({"town": f"Keep it to {MAX_TOWN} characters or fewer."})
+    towns = local_towns(get_config(conn))
+    if any(t.lower() == town.lower() for t in towns):
+        raise ValidationError({"town": f"{town} is already on the list."})
+    if len(towns) >= MAX_TOWNS:
+        raise ValidationError({"town": f"The list holds up to {MAX_TOWNS} towns."})
+    _save_towns(conn, towns + [town])
+    return town
+
+
+def remove_local_town(conn: sqlite3.Connection, town: str) -> None:
+    towns = local_towns(get_config(conn))
+    _save_towns(conn, [t for t in towns if t.lower() != _clean(town).lower()])
+
+
+def place_key(location: str | None) -> str:
+    """How a place is recognised: trimmed, single spaces, capitals ignored."""
+    return " ".join((location or "").split()).lower()
+
+
+def town_in(location: str | None, towns: list[str]) -> str | None:
+    """The first local town named in `location` as a whole word (capitals ignored), or None."""
+    text = location or ""
+    for t in towns:
+        words = r"\s+".join(re.escape(w) for w in t.split())
+        if words and re.search(rf"(?<![\w]){words}(?![\w])", text, re.IGNORECASE):
+            return t
+    return None
+
+
+def place_status(conn: sqlite3.Connection, location: str | None, cfg: dict | None = None) -> dict:
+    """Is a Google event's place local or out of town, and why?
+
+    Returns {"state": "local" | "out" | "ask", "why": "none" | "remembered" | "town" | "new", "town": …}.
+    Order: an answer given before for this place; no location (local); a local
+    town named in it (local); otherwise ask.
+    """
+    key = place_key(location)
+    if not key:
+        return {"state": "local", "why": "none", "town": None}
+    row = conn.execute("SELECT out_of_town FROM import_places WHERE place = ?", (key,)).fetchone()
+    if row is not None:
+        return {"state": "out" if row["out_of_town"] else "local", "why": "remembered", "town": None}
+    town = town_in(location, local_towns(cfg or get_config(conn)))
+    if town:
+        return {"state": "local", "why": "town", "town": town}
+    return {"state": "ask", "why": "new", "town": None}
+
+
+def remember_place(conn: sqlite3.Connection, location: str, out_of_town: bool, commit: bool = True) -> None:
+    """Record Dan's answer for a place; later imports use it (the events already added keep theirs)."""
+    key = place_key(location)
+    if not key:
+        return
+    conn.execute(
+        "INSERT INTO import_places (place, label, out_of_town, answered) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(place) DO UPDATE SET out_of_town = excluded.out_of_town, answered = excluded.answered",
+        (key, " ".join(location.split())[:MAX_LOCATION], 1 if out_of_town else 0, _now_text()),
+    )
+    if commit:
+        conn.commit()
+
+
+def list_places(conn: sqlite3.Connection) -> list[dict]:
+    return [dict(r) for r in conn.execute("SELECT * FROM import_places ORDER BY label COLLATE NOCASE")]
+
+
+def forget_place(conn: sqlite3.Connection, place: str) -> None:
+    conn.execute("DELETE FROM import_places WHERE place = ?", (place,))
     conn.commit()

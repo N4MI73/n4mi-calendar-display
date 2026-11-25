@@ -335,7 +335,7 @@ class MigrationTests(unittest.TestCase):
                 tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 self.assertTrue({"device_state", "device_commands"} <= tables)
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM device_state").fetchone()[0], 1)
-                self.assertEqual(conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 7)
+                self.assertGreaterEqual(conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 7)
             finally:
                 conn.close()
 

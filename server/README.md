@@ -281,6 +281,35 @@ pulls a finished image (`pull_policy: always`).
   404 for another API version. Additive: `/api/v1/display` is unchanged, and
   these requests don't count as display contact on the Health page.
 
+## Out of town (v1.1)
+
+- An event can be marked **Out of town** ("Away from home" in the event
+  form, and in the import review form). It is set once for the whole event or
+  series; moving or deleting one date on the shelf leaves it alone, and the
+  shelf's Add form never sets it. Migration 0008 adds `events.out_of_town`
+  (0 for every existing event) and the `import_places` table.
+- **On the shelf** an "Out of town" tag (outlined, square corners, a car icon,
+  never colour alone) shows wherever the event appears: Today, Coming up, the
+  See all panel, the details panel and the banner.
+- **Reminder:** an out-of-town event that uses its category's reminder gets the
+  longer of that reminder and **Out of town reminder, in days before**
+  (Settings, default 5; 0 turns it off). A category with no reminder counts as
+  shorter, except Info (other people's events), which stays as it is. A custom
+  reminder, or "No reminder", always wins.
+- **Import:** a new Google event's place decides it, in this order: an answer
+  given before for that place (Settings → Places answered at import); no
+  location → local; a town on the **Local towns** list named in the location
+  as a whole word, any capitals → local; otherwise the review asks **Local or
+  out of town?** and remembers the answer for that place (trimmed, single
+  spaces, capitals ignored). "Add ticked with defaults" leaves an event
+  waiting until its question is answered; "Review and add" fills the tick box
+  from the answer, and for a new place the tick box becomes the answer. An
+  import never changes the setting on an event already here, and Link keeps it.
+  The local towns list starts with Grovetown, Evans, Augusta, Martinez and North
+  Augusta (the builder's household); edit it in Settings.
+- **API (additive):** each event in `/api/v1/display` and
+  `/api/v1/display/days` gains `out_of_town` (true/false).
+
 ## Quick titles and Recently deleted (editor)
 
 - **Quick titles** (Settings → Quick titles): the one-tap titles on the

@@ -212,6 +212,20 @@ html.kiosk, html.kiosk * { cursor: none !important; }
 .pill.notes svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
 .item .pill.notes { padding: 0.0625rem 0.625rem; }
 
+/* Out of town tag (v1.1): outlined, square corners, a car; never filled with a colour,
+   so it can't be mistaken for a person (round, filled) or a category (round, coloured square). */
+.oot { display: inline-flex; align-items: center; gap: 0.4375rem; font-size: 1.125rem; font-weight: 700; line-height: 1.35;
+  padding: 0.0625rem 0.6875rem 0.0625rem 0.5rem; border: 2px solid #E3E6EB; border-radius: 6px; color: var(--text);
+  white-space: nowrap; flex: 0 0 auto; }
+.oot svg { width: 1.375rem; height: 1.375rem; fill: none; stroke: currentColor; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.item .oot, .arow .oot { font-size: 1rem; padding: 0 0.625rem 0 0.4375rem; }
+.item .oot svg, .arow .oot svg { width: 1.25rem; height: 1.25rem; }
+.banner-pills .oot { font-size: 1.25rem; align-self: center; }
+.banner.soon .oot { border-color: var(--bg); color: var(--bg); }
+.sheet .loc .oot { font-size: 1.375rem; }
+.sheet .loc .oot svg { width: 1.625rem; height: 1.625rem; stroke: currentColor; }
+
 /* Phase 4 panels: details, delete, move, add ------------------------------- */
 .overlay { position: fixed; inset: 0; z-index: 5; background: rgba(6, 8, 12, 0.74); display: flex; align-items: center;
   justify-content: center; padding: 1.5rem; }

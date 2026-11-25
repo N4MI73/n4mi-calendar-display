@@ -43,9 +43,12 @@ def _out_of_dark(at: datetime, dark_start: time, dark_end: time) -> datetime:
     return end if end > at else end + timedelta(days=1)
 
 
-def remind_at(event: dict, dark_start: time, dark_end: time) -> datetime | None:
-    """When the banner for this event (or occurrence) should start, or None for no reminder."""
-    minutes = store.effective_reminder_minutes(event)
+def remind_at(event: dict, dark_start: time, dark_end: time, oot_days: int = 0) -> datetime | None:
+    """When the banner for this event (or occurrence) should start, or None for no reminder.
+
+    `oot_days`: the out-of-town reminder from the settings (v1.1).
+    """
+    minutes = store.effective_reminder_minutes(event, oot_days)
     if minutes is None:
         return None
     start = timeutil.parse_local(event["start_local"])
@@ -61,10 +64,10 @@ def _fmt_local(dt: datetime) -> str:
     return dt.strftime(timeutil.DT_FMT)
 
 
-def _event_json(e: dict, dark_start: time, dark_end: time) -> dict:
+def _event_json(e: dict, dark_start: time, dark_end: time, oot_days: int = 0) -> dict:
     start = timeutil.parse_local(e["start_local"])
     end = timeutil.parse_local(e["end_local"])
-    at = remind_at(e, dark_start, dark_end)
+    at = remind_at(e, dark_start, dark_end, oot_days)
     info = (e.get("category_name") or "").strip().lower() == INFO_CATEGORY
     return {
         "id": e["id"],
@@ -86,6 +89,8 @@ def _event_json(e: dict, dark_start: time, dark_end: time) -> dict:
         "repeat_text": recurrence.describe(e["rrule"], timeutil.parse_local(e["start_local"]).date(),
                                            e["recurrence_end"]) if e.get("recurring") else "",
         "changed": bool(e.get("changed")),
+        # v1.1: away from home; the shelf shows the "Out of town" tag.
+        "out_of_town": bool(e.get("out_of_town")),
     }
 
 
@@ -111,6 +116,7 @@ def _fill_days(conn: sqlite3.Connection, cfg: dict, first: date, last: date, car
     """
     dark_start = timeutil.parse_time(cfg["dark_start"])
     dark_end = timeutil.parse_time(cfg["dark_end"])
+    oot_days = store.oot_days(cfg)
     days = {}
     d = first
     while d <= last:
@@ -118,7 +124,7 @@ def _fill_days(conn: sqlite3.Connection, cfg: dict, first: date, last: date, car
         d += timedelta(days=1)
 
     for e in store.list_events(conn, first, last):
-        item = _event_json(e, dark_start, dark_end)
+        item = _event_json(e, dark_start, dark_end, oot_days)
         start = timeutil.parse_local(e["start_local"]).date()
         end = timeutil.parse_local(e["end_local"]).date()
         if start < first and not carry_in:

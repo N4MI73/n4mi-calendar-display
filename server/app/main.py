@@ -27,7 +27,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db, display, google_links, health, holidays, ical_import, importer, recurrence, store, timeutil
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 BASE_DIR = Path(__file__).parent
 
 
@@ -120,6 +120,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     def render(request: Request, name: str, status_code: int = 200, **ctx) -> HTMLResponse:
         ctx.setdefault("msg", request.query_params.get("msg", ""))
+        if name == "event_form.html" and "oot_days" not in ctx:
+            c_ = conn()
+            try:
+                ctx["oot_days"] = store.oot_days(store.get_config(c_))   # v1.1: the Out of town hint
+            finally:
+                c_.close()
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     def redirect(path: str, msg: str = "") -> RedirectResponse:
@@ -428,6 +434,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             reminder_mode=form.get("reminder_mode", "default"),
             reminder_minutes=form.get("reminder_minutes", ""),
             reminder_unit=form.get("reminder_unit", "minutes"),
+            out_of_town=form.get("out_of_town") == "1",
             **_repeat_from_form(form, default="none"),
         )
 
@@ -1018,6 +1025,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         c = conn()
         try:
             today = timeutil.now_local().date()
+            cfg = store.get_config(c)
             groups = {k: [] for k in importer.KINDS}
             for it in importer.list_items(c):
                 g = it["g"]
@@ -1029,6 +1037,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                     it["local_when"] = _local_when(ev)
                 if it["kind"] == "new":
                     it["overlaps"] = importer.overlaps(c, g, today)
+                    it["place"] = importer.place_status(c, it, cfg)   # v1.1: local or out of town
                 if it["kind"] in ("changed", "conflict") and ev:
                     it["rows"] = _rows(importer.local_version(c, ev), g)
                 if it["kind"] in ("duplicate", "changed", "conflict", "removed", "same_uid") and not ev:
@@ -1053,13 +1062,18 @@ def create_app(db_path: str | None = None) -> FastAPI:
             return redirect("/import/review", "Nothing was ticked.")
         c = conn()
         try:
+            waiting = importer.waiting_for_answer(c, ids)
             try:
                 n = importer.add_with_defaults(c, ids)
             except importer.ImportError_ as exc:
                 return redirect("/import/review", str(exc))
         finally:
             c.close()
-        return redirect("/import/review", f"Added {n} event{'s' if n != 1 else ''}.")
+        msg = f"Added {n} event{'s' if n != 1 else ''}."
+        if waiting:
+            msg += (f" {waiting} {'is' if waiting == 1 else 'are'} waiting for “Local or out of town?”:"
+                    " answer it, then add.")
+        return redirect("/import/review", msg)
 
     @app.post("/import/review/apply-all")
     def import_apply_all():
@@ -1077,6 +1091,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             it = importer.get_item(c, item_id)
             if not it or it["kind"] != "new":
                 return redirect("/import/review", "That item has already been dealt with.")
+            it["place"] = importer.place_status(c, it)
             return render(request, "event_form.html", form=importer.form_for_item(c, it), event_id=None, errors={},
                           people=store.list_people(c), categories=store.list_categories(c), exceptions=[],
                           future=None, future_label="", dropped=[], shelf_added=False, import_item=it,
@@ -1092,6 +1107,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             it = importer.get_item(c, item_id)
             if not it or it["kind"] != "new":
                 return redirect("/import/review", "That item has already been dealt with.")
+            it["place"] = importer.place_status(c, it)
             try:
                 importer.add_reviewed(c, item_id, form)
             except store.ValidationError as exc:
@@ -1102,6 +1118,24 @@ def create_app(db_path: str | None = None) -> FastAPI:
         finally:
             c.close()
         return redirect("/import/review", f"Added “{form.title.strip()}”.")
+
+    @app.post("/import/items/{item_id}/place")
+    async def import_item_place(item_id: int, request: Request):
+        """v1.1: the answer to "Local or out of town?", remembered for this place."""
+        f = await request.form()
+        answer = f.get("answer", "")
+        if answer not in ("local", "out"):
+            return redirect("/import/review", "Choose Local or Out of town.")
+        c = conn()
+        try:
+            try:
+                place = importer.answer_place(c, item_id, answer == "out")
+            except importer.ImportError_ as exc:
+                return redirect("/import/review", str(exc))
+        finally:
+            c.close()
+        word = "out of town" if answer == "out" else "local"
+        return redirect("/import/review", f"{' '.join(place.split())}: {word}, from now on.")
 
     _ITEM_ACTIONS = {
         "skip": (importer.skip, "Skipped. It won't be offered again."),
@@ -1446,9 +1480,16 @@ def create_app(db_path: str | None = None) -> FastAPI:
             off = start == end
         except ValueError:
             crosses = off = False
+        c = conn()
+        try:
+            towns = store.local_towns(store.get_config(c))
+            places = store.list_places(c)
+        finally:
+            c.close()
         return render(
             request, "settings.html", status_code=status,
             cfg=cfg, errors=errors or {}, crosses_midnight=crosses, dark_off=off,
+            towns=towns, places=places,
         )
 
     @app.get("/settings", response_class=HTMLResponse)
@@ -1463,16 +1504,68 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @app.post("/settings", response_class=HTMLResponse)
     async def settings_save(request: Request):
         f = await request.form()
-        form = {k: f.get(k, "") for k in store.DEFAULT_CONFIG}
+        # Only the fields sent: a form without one (an older page, a test) leaves that setting as it is.
+        form = {k: f.get(k, "") for k in store.DEFAULT_CONFIG if k in f}
+        for k in ("upcoming_days", "stale_minutes", "dark_start", "dark_end", "wake_seconds"):
+            form.setdefault(k, "")   # these are always on the Settings form, so a missing one is an error
         c = conn()
         try:
             try:
                 store.save_config(c, form)
             except store.ValidationError as exc:
-                return _settings_page(request, form, exc.errors, status=400)
+                return _settings_page(request, dict(store.get_config(c), **form), exc.errors, status=400)
         finally:
             c.close()
         return redirect("/settings", "Settings saved.")
+
+    # ------------------------------------------------------------ Out of town (v1.1)
+
+    @app.post("/settings/towns/add")
+    async def settings_town_add(request: Request):
+        f = await request.form()
+        c = conn()
+        try:
+            try:
+                town = store.add_local_town(c, f.get("town", ""))
+            except store.ValidationError as exc:
+                return redirect("/settings", exc.errors["town"])
+        finally:
+            c.close()
+        return redirect("/settings", f"Added {town}.")
+
+    @app.post("/settings/towns/remove")
+    async def settings_town_remove(request: Request):
+        f = await request.form()
+        c = conn()
+        try:
+            store.remove_local_town(c, f.get("town", ""))
+        finally:
+            c.close()
+        return redirect("/settings", f"Removed {f.get('town', '')}.")
+
+    @app.post("/settings/places/change")
+    async def settings_place_change(request: Request):
+        f = await request.form()
+        c = conn()
+        try:
+            row = c.execute("SELECT * FROM import_places WHERE place = ?", (f.get("place", ""),)).fetchone()
+            if row is None:
+                return redirect("/settings", "That place is no longer on the list.")
+            store.remember_place(c, row["label"], not row["out_of_town"])
+            word = "local" if row["out_of_town"] else "out of town"
+        finally:
+            c.close()
+        return redirect("/settings", f"{row['label']}: now {word} for later imports.")
+
+    @app.post("/settings/places/forget")
+    async def settings_place_forget(request: Request):
+        f = await request.form()
+        c = conn()
+        try:
+            store.forget_place(c, f.get("place", ""))
+        finally:
+            c.close()
+        return redirect("/settings", "Forgotten. The next import will ask again for that place.")
 
     # ------------------------------------------------------------ backup (v0.6.3)
 

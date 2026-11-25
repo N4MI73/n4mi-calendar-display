@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_oot.html" import oot_tag %}
 {% set active = 'settings' %}
 {% block title %}Settings{% endblock %}
 {% block content %}
@@ -45,8 +46,46 @@
     {% if errors.wake_seconds %}<p class="err">{{ errors.wake_seconds }}</p>{% endif %}
   </div>
 
+  <h2 id="out-of-town">Out of town</h2>
+  <div class="field {% if errors.oot_reminder_days %}has-error{% endif %}">
+    <label for="oot_reminder_days">Out of town reminder, in days before</label>
+    <input id="oot_reminder_days" name="oot_reminder_days" type="number" min="0" max="30" inputmode="numeric" value="{{ cfg.oot_reminder_days }}">
+    <p class="hint">For out-of-town events {{ oot_tag(hidden=true) }} set to their category's reminder, when this is longer. An event's own reminder still wins. 0 turns it off.</p>
+    {% if errors.oot_reminder_days %}<p class="err">{{ errors.oot_reminder_days }}</p>{% endif %}
+  </div>
+
   <div class="actions"><button class="btn btn-primary" type="submit">Save settings</button></div>
 </form>
+
+<h3>Local towns</h3>
+<p class="hint">At import, a new Google event whose location names one of these counts as local, without asking.</p>
+{% if towns %}
+<ul class="town-list">
+  {% for t in towns %}
+  <li><span>{{ t }}</span><form method="post" action="/settings/towns/remove" class="inline"><input type="hidden" name="town" value="{{ t }}"><button class="btn btn-quiet btn-small" type="submit" aria-label="Remove {{ t }}">Remove</button></form></li>
+  {% endfor %}
+</ul>
+{% else %}<p class="empty">No local towns yet.</p>{% endif %}
+<form method="post" action="/settings/towns/add" class="row-form">
+  <label for="town" class="sr-only">Add a town</label>
+  <input id="town" name="town" type="text" maxlength="60" placeholder="Add a town">
+  <button class="btn" type="submit">Add</button>
+</form>
+
+<h3>Places answered at import ({{ places|length }})</h3>
+{% if places %}
+<ul class="plain-list place-list">
+  {% for p in places %}
+  <li>
+    <span class="place-name">{{ p.label }}</span>
+    <span class="place-answer">{% if p.out_of_town %}{{ oot_tag() }}{% else %}Local{% endif %}</span>
+    <form method="post" action="/settings/places/change" class="inline"><input type="hidden" name="place" value="{{ p.place }}"><button class="btn btn-small" type="submit">Change to {{ 'local' if p.out_of_town else 'out of town' }}</button></form>
+    <form method="post" action="/settings/places/forget" class="inline"><input type="hidden" name="place" value="{{ p.place }}"><button class="btn btn-quiet btn-small" type="submit">Forget</button></form>
+  </li>
+  {% endfor %}
+</ul>
+<p class="hint">Changing or forgetting a place affects later imports only; events already in the calendar keep their setting.</p>
+{% else %}<p class="empty">None yet. The import asks “Local or out of town?” for a place it hasn't seen, and the answers appear here.</p>{% endif %}
 
 <h2>Backup</h2>
 <p>Download a copy of the whole calendar (events, people, categories, reminders and settings) as one file. The server also makes its own copy every night, so this is for keeping an extra copy of your own, for example before a big change. Keep the file private: it holds the household's events.</p>

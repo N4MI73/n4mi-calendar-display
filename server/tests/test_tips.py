@@ -56,7 +56,10 @@ class TestTips(unittest.TestCase):
             "recently_deleted.html": ["Restore"],
             "not_in_google.html": ["Add to Google", "Not needed in Google"],
             "import_source.html": ["Title rules"],
-            "settings.html": ["Download a backup"],
+            "settings.html": ["Download a backup", "Out of town reminder, in days before", "Local towns",
+                              "Places answered at import"],
+            "event_form.html": ["Away from home"],
+            "import_review.html": ["Local or out of town?"],
         }
         tips = read("tips.html")
         for name, phrases in checks.items():

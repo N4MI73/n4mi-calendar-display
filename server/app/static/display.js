@@ -169,8 +169,17 @@
     return s;
   }
 
+  // v1.1: the Out of town tag: outlined, square corners, a car, never colour alone.
+  function ootTag() {
+    var s = el("span", "oot");
+    s.appendChild(icon("car"));
+    s.appendChild(document.createTextNode("Out of town"));
+    return s;
+  }
+
   function tags(ev, withWhere) {
     var box = el("div", "tags");
+    if (ev.out_of_town) box.appendChild(ootTag());
     if (!ev.info) ev.people.forEach(function (p) { box.appendChild(personPill(p)); });
     box.appendChild(categoryPill(ev.category));
     if (withWhere && ev.location) box.appendChild(el("span", "where", ev.location));
@@ -188,6 +197,8 @@
     warn: ["M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z", "M12 9v4", "M12 17h.01"],
     back: ["M21 5H9l-6 7 6 7h12z", "M17 9l-5 6", "M12 9l5 6"],
     tick: ["M5 12.5l4.5 4.5L19 7.5"],
+    car: ["M4.5 14.5l1.6-4.6A2 2 0 0 1 8 8.5h8a2 2 0 0 1 1.9 1.4l1.6 4.6", "M4.5 14.5h15a1.5 1.5 0 0 1 1.5 1.5v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5V16a1.5 1.5 0 0 1 1.5-1.5z",
+          "M6.5 19v1.5M17.5 19v1.5"],
     left: ["M15 5l-7 7 7 7"],
     right: ["M9 5l7 7-7 7"],
     // Phase 6a: health levels, Restart, Shut down.
@@ -340,6 +351,9 @@
       $("banner-sub").textContent = b.sub || "";
       var pills = $("banner-pills");
       pills.textContent = "";
+      // The tag rides on the calm banners (days ahead, later today); the bright "in N minutes"
+      // banner has no room for it, and the event is highlighted in Today with its tag then.
+      if (b.ev.out_of_town && !b.soon) pills.appendChild(ootTag());
       if (!b.ev.info) b.ev.people.forEach(function (p) { pills.appendChild(personPill(p)); });
     } else {
       banner.hidden = true;
@@ -712,10 +726,13 @@
     card.appendChild(el("h3", null, ev.title));
     card.appendChild(el("div", "when", whenLine(ev)));
     if (ev.repeat_text) card.appendChild(el("div", "rep", "Repeats: " + ev.repeat_text));
-    if (ev.location) {
+    if (ev.location || ev.out_of_town) {
       var loc = el("div", "loc");
-      loc.appendChild(icon("pin"));
-      loc.appendChild(document.createTextNode(ev.location));
+      if (ev.out_of_town) loc.appendChild(ootTag());
+      if (ev.location) {
+        loc.appendChild(icon("pin"));
+        loc.appendChild(document.createTextNode(ev.location));
+      }
       card.appendChild(loc);
     }
     var t = el("div", "tags");
