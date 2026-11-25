@@ -11,7 +11,9 @@ os.environ["CAL_NO_AUTOAPP"] = "1"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import db, store  # noqa: E402
+from datetime import timedelta  # noqa: E402
+
+from app import db, store, timeutil  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
@@ -23,8 +25,10 @@ class TestBackupDownload(unittest.TestCase):
         c = db.connect(self.db_path)
         alex = store.save_person(c, "Alex", "#4C9AFF")
         cat = c.execute("SELECT id FROM categories WHERE name = 'Home'").fetchone()[0]
-        store.save_event(c, store.EventInput(title="Car service", start_date="2026-11-24", start_time="09:15",
-                                             end_date="2026-11-24", end_time="10:45", category_id=str(cat),
+        # Dated a week from now: the events page lists dates from today on by the real clock.
+        soon = (timeutil.now_local() + timedelta(days=7)).date().isoformat()
+        store.save_event(c, store.EventInput(title="Car service", start_date=soon, start_time="09:15",
+                                             end_date=soon, end_time="10:45", category_id=str(cat),
                                              person_ids=[str(alex)]))
         c.close()
         self.client = TestClient(create_app(self.db_path))

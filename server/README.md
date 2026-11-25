@@ -306,4 +306,11 @@ python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 
-The same tests run in GitHub Actions before every image build.
+The same tests run in GitHub Actions before every image build, so a failing
+test stops the image being published.
+
+**Dates in tests:** anything that depends on "today" must use a date relative
+to the real clock (for example `timeutil.now_local() + timedelta(days=7)`) or
+pass a fixed test clock (`?now=` or a `now` argument). A fixed calendar date
+works until that date passes, then fails the build: this happened three times
+in November 2026.
